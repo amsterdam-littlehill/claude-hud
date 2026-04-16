@@ -8,6 +8,11 @@ export const en = {
     "label.hooks": "hooks",
     "label.estimatedCost": "Est.",
     "label.cost": "Cost",
+    "label.provider": "Provider",
+    "label.model": "Model",
+    "label.weekUsed": "Week Used",
+    "label.fiveHourUsed": "5H Used",
+    "label.reset": "Reset",
     // Status
     "status.limitReached": "Limit reached",
     "status.allTodosComplete": "All todos complete",

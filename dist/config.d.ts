@@ -2,6 +2,7 @@ import type { Language } from './i18n/types.js';
 export type LineLayoutType = 'compact' | 'expanded';
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
+export type UsageDisplayMode = 'basic' | 'compact' | 'table' | 'badge';
 /**
  * Controls how the model name is displayed in the HUD badge.
  *
@@ -69,6 +70,7 @@ export interface HudConfig {
         modelFormat: ModelFormatMode;
         modelOverride: string;
         customLine: string;
+        usageDisplayMode: UsageDisplayMode;
     };
     colors: HudColorOverrides;
 }

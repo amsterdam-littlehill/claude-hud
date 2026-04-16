@@ -54,6 +54,7 @@ export const DEFAULT_CONFIG = {
         modelFormat: 'full',
         modelOverride: '',
         customLine: '',
+        usageDisplayMode: 'compact',
     },
     colors: {
         context: 'green',
@@ -90,6 +91,9 @@ function validateLanguage(value) {
 }
 function validateModelFormat(value) {
     return value === 'full' || value === 'compact' || value === 'short';
+}
+function validateUsageDisplayMode(value) {
+    return value === 'basic' || value === 'compact' || value === 'table' || value === 'badge';
 }
 function validateColorName(value) {
     return value === 'dim'
@@ -273,6 +277,9 @@ export function mergeConfig(userConfig) {
         customLine: typeof migrated.display?.customLine === 'string'
             ? migrated.display.customLine.slice(0, 80)
             : DEFAULT_CONFIG.display.customLine,
+        usageDisplayMode: validateUsageDisplayMode(migrated.display?.usageDisplayMode)
+            ? migrated.display.usageDisplayMode
+            : DEFAULT_CONFIG.display.usageDisplayMode,
     };
     const colors = {
         context: validateColorValue(migrated.colors?.context)

@@ -8,6 +8,7 @@ export type LineLayoutType = 'compact' | 'expanded';
 
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
+export type UsageDisplayMode = 'basic' | 'compact' | 'table' | 'badge';
 
 /**
  * Controls how the model name is displayed in the HUD badge.
@@ -99,6 +100,7 @@ export interface HudConfig {
     modelFormat: ModelFormatMode;
     modelOverride: string;
     customLine: string;
+    usageDisplayMode: UsageDisplayMode;
   };
   colors: HudColorOverrides;
 }
@@ -144,6 +146,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     modelFormat: 'full',
     modelOverride: '',
     customLine: '',
+    usageDisplayMode: 'compact',
   },
   colors: {
     context: 'green',
@@ -187,6 +190,10 @@ function validateLanguage(value: unknown): value is Language {
 
 function validateModelFormat(value: unknown): value is ModelFormatMode {
   return value === 'full' || value === 'compact' || value === 'short';
+}
+
+function validateUsageDisplayMode(value: unknown): value is UsageDisplayMode {
+  return value === 'basic' || value === 'compact' || value === 'table' || value === 'badge';
 }
 
 function validateColorName(value: unknown): value is HudColorName {
@@ -386,6 +393,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     customLine: typeof migrated.display?.customLine === 'string'
       ? migrated.display.customLine.slice(0, 80)
       : DEFAULT_CONFIG.display.customLine,
+    usageDisplayMode: validateUsageDisplayMode(migrated.display?.usageDisplayMode)
+      ? migrated.display.usageDisplayMode
+      : DEFAULT_CONFIG.display.usageDisplayMode,
   };
 
   const colors = {

@@ -68,6 +68,11 @@ export interface UsageData {
   sevenDay: number | null;  // 0-100 percentage, null if unavailable
   fiveHourResetAt: Date | null;
   sevenDayResetAt: Date | null;
+  // Optional absolute values for provider-based usage rendering
+  fiveHourUsed?: number | null;
+  fiveHourLimit?: number | null;
+  sevenDayUsed?: number | null;
+  sevenDayLimit?: number | null;
 }
 
 export interface MemoryInfo {

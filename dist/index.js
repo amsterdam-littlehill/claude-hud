@@ -8,6 +8,7 @@ import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { setLanguage, t } from "./i18n/index.js";
+import { fetchProviderUsage } from "./provider-usage.js";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 export async function main(overrides = {}) {
@@ -48,10 +49,20 @@ export async function main(overrides = {}) {
         const gitStatus = config.gitStatus.enabled
             ? await deps.getGitStatus(stdin.cwd)
             : null;
-        // Usage comes only from Claude Code's official stdin rate_limits fields.
+        // Usage: prefer Claude Code's official stdin rate_limits,
+        // fall back to provider-based API fetch for third-party providers (e.g. Kimi).
         let usageData = null;
         if (config.display.showUsage !== false) {
             usageData = deps.getUsageFromStdin(stdin);
+            // If stdin has no rate_limits, try provider-based usage (Kimi, etc.)
+            if (!usageData) {
+                try {
+                    usageData = await fetchProviderUsage();
+                }
+                catch {
+                    // Silently ignore provider fetch errors — HUD still works without usage
+                }
+            }
         }
         const extraCmd = deps.parseExtraCmdArg();
         const extraLabel = extraCmd ? await deps.runExtraCmd(extraCmd) : null;

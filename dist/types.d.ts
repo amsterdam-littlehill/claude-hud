@@ -62,6 +62,10 @@ export interface UsageData {
     sevenDay: number | null;
     fiveHourResetAt: Date | null;
     sevenDayResetAt: Date | null;
+    fiveHourUsed?: number | null;
+    fiveHourLimit?: number | null;
+    sevenDayUsed?: number | null;
+    sevenDayLimit?: number | null;
 }
 export interface MemoryInfo {
     totalBytes: number;

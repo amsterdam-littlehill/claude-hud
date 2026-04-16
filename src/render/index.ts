@@ -396,8 +396,9 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
       const secondLine = renderElementLine(ctx, nextElement);
 
       if (firstLine && secondLine) {
+        const hasMultiline = firstLine.includes('\n') || secondLine.includes('\n');
         const combinedLine = `${firstLine} │ ${secondLine}`;
-        const canCombine = !terminalWidth || visualLength(combinedLine) <= terminalWidth;
+        const canCombine = !hasMultiline && (!terminalWidth || visualLength(combinedLine) <= terminalWidth);
 
         if (canCombine) {
           lines.push({ line: combinedLine, isActivity: false });

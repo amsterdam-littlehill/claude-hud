@@ -10,6 +10,11 @@ export const zh: Messages = {
   "label.hooks": "钩子",
   "label.estimatedCost": "估算",
   "label.cost": "费用",
+  "label.provider": "提供商",
+  "label.model": "模型",
+  "label.weekUsed": "周用量",
+  "label.fiveHourUsed": "5小时用量",
+  "label.reset": "重置",
 
   // Status
   "status.limitReached": "已达上限",

@@ -2,9 +2,82 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getModelName, formatModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
-import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor } from '../colors.js';
+import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, quotaBar } from '../colors.js';
+import { getAdaptiveBarWidth } from '../../utils/terminal.js';
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
+import { getDetectedProviderName } from '../../provider-usage.js';
+function formatResetTime(resetAt) {
+    if (!resetAt)
+        return '';
+    const now = new Date();
+    const diffMs = resetAt.getTime() - now.getTime();
+    if (diffMs <= 0)
+        return '';
+    const diffMins = Math.ceil(diffMs / 60000);
+    if (diffMins < 60)
+        return `${diffMins}m`;
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    if (hours >= 24) {
+        const days = Math.floor(hours / 24);
+        const remHours = hours % 24;
+        if (remHours > 0)
+            return `${days}d ${remHours}h`;
+        return `${days}d`;
+    }
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+function formatUsageValue(used, limit, percent) {
+    if (typeof used === 'number' && typeof limit === 'number') {
+        return `${used}/${limit}`;
+    }
+    if (typeof percent === 'number') {
+        return `${percent}%`;
+    }
+    return '--';
+}
+function formatResetTimePrecise(resetAt) {
+    if (!resetAt)
+        return '';
+    const now = new Date();
+    const diffMs = resetAt.getTime() - now.getTime();
+    if (diffMs <= 0)
+        return '';
+    const diffMins = Math.ceil(diffMs / 60000);
+    if (diffMins < 60)
+        return `${diffMins}m`;
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    if (hours >= 24) {
+        const days = Math.floor(hours / 24);
+        const remHours = hours % 24;
+        return `${days}d${remHours}h`;
+    }
+    return `${hours}h${mins}m`;
+}
+function formatCompactProvider(provider) {
+    if (!provider)
+        return '';
+    const map = {
+        anthropic: 'Ant',
+        openai: 'OA',
+        google: 'Goo',
+        kimi: 'Kim',
+    };
+    const normalized = provider.toLowerCase();
+    return map[normalized] || provider.slice(0, 3);
+}
+function formatCompactModelName(model) {
+    if (!model)
+        return '';
+    const short = formatModelName(model, 'short');
+    const words = short.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+        return words[0] + words.slice(1).join('');
+    }
+    return short;
+}
 function hyperlink(uri, text) {
     const esc = '\x1b';
     const st = '\\';
@@ -16,10 +89,55 @@ export function renderProjectLine(ctx) {
     const parts = [];
     if (display?.showModel !== false) {
         const model = formatModelName(getModelName(ctx.stdin), ctx.config?.display?.modelFormat, ctx.config?.display?.modelOverride);
-        const providerLabel = getProviderLabel(ctx.stdin);
-        const modelQualifier = providerLabel ?? undefined;
-        const modelDisplay = modelQualifier ? `${model} | ${modelQualifier}` : model;
-        parts.push(modelColor(`[${modelDisplay}]`, colors));
+        const providerLabel = getProviderLabel(ctx.stdin) ?? getDetectedProviderName() ?? undefined;
+        const usageMode = display?.usageDisplayMode ?? 'compact';
+        let modelDisplay;
+        if (usageMode === 'compact' && providerLabel) {
+            const compactProvider = formatCompactProvider(providerLabel);
+            const compactModel = formatCompactModelName(model);
+            modelDisplay = modelColor(`${compactProvider}:${compactModel}`, colors);
+        }
+        else {
+            modelDisplay = modelColor(`[${model}]`, colors);
+            if (providerLabel) {
+                modelDisplay = modelColor(`[${providerLabel}]`, colors) + modelDisplay;
+            }
+        }
+        let usagePart = null;
+        if (display?.showUsage !== false && ctx.usageData) {
+            if (usageMode === 'basic') {
+                const weekVal = formatUsageValue(ctx.usageData.sevenDayUsed, ctx.usageData.sevenDayLimit, ctx.usageData.sevenDay);
+                const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, ctx.usageData.fiveHour);
+                const weekReset = formatResetTime(ctx.usageData.sevenDayResetAt ?? null);
+                const fiveHourReset = formatResetTime(ctx.usageData.fiveHourResetAt ?? null);
+                const weekPart = weekVal !== '--' ? label(`[${weekVal}${weekReset ? `(${weekReset})` : ''}]`, colors) : '';
+                const fiveHourPart = fiveHourVal !== '--' ? label(`[${fiveHourVal}${fiveHourReset ? `(${fiveHourReset})` : ''}]`, colors) : '';
+                if (weekPart || fiveHourPart) {
+                    modelDisplay += label('-', colors) + weekPart + fiveHourPart;
+                }
+            }
+            else if (usageMode === 'compact') {
+                const barWidth = getAdaptiveBarWidth();
+                const weekVal = formatUsageValue(ctx.usageData.sevenDayUsed, ctx.usageData.sevenDayLimit, ctx.usageData.sevenDay);
+                const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, ctx.usageData.fiveHour);
+                const weekReset = formatResetTimePrecise(ctx.usageData.sevenDayResetAt ?? null);
+                const fiveHourReset = formatResetTimePrecise(ctx.usageData.fiveHourResetAt ?? null);
+                const usageParts = [];
+                if (ctx.usageData.sevenDay !== null) {
+                    usageParts.push(`W:${quotaBar(ctx.usageData.sevenDay, barWidth, colors)} ${weekVal}${weekReset ? `(${weekReset})` : ''}`);
+                }
+                if (ctx.usageData.fiveHour !== null) {
+                    usageParts.push(`5H:${quotaBar(ctx.usageData.fiveHour, barWidth, colors)} ${fiveHourVal}${fiveHourReset ? `(${fiveHourReset})` : ''}`);
+                }
+                if (usageParts.length > 0) {
+                    usagePart = usageParts.join(' ');
+                }
+            }
+        }
+        parts.push(modelDisplay);
+        if (usagePart) {
+            parts.push(usagePart);
+        }
     }
     let projectPart = null;
     if (display?.showProject !== false && ctx.stdin.cwd) {

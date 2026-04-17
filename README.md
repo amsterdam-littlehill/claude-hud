@@ -204,6 +204,10 @@ Usage display is **enabled by default** when Claude Code provides subscriber `ra
 
 ClaudeHUD intentionally trusts only the official statusline stdin payload for live usage. It does not read local OAuth credentials or poll undocumented usage endpoints in the background.
 
+For third-party providers that replace the Anthropic API endpoint (such as **Kimi** and **GLM**), ClaudeHUD detects the provider from your `ANTHROPIC_BASE_URL` setting and fetches usage directly from the provider's API when Claude Code's native `rate_limits` are unavailable:
+- **Kimi** (`kimi.com`) — coding plan usage via Kimi's `/v1/usages` endpoint
+- **GLM** (`bigmodel.cn`) — quota limits via `open.bigmodel.cn/api/monitor/usage/quota/limit`
+
 Free/weekly-only accounts render the weekly window by itself instead of showing a ghost `5h: --` placeholder.
 
 The 7-day percentage appears when above the `display.sevenDayThreshold` (default 80%):

@@ -168,6 +168,85 @@ const kimiProvider = {
         };
     },
 };
+const glmProvider = {
+    name: 'glm',
+    async fetchUsage(apiKey, _baseUrl) {
+        const endpoint = 'https://open.bigmodel.cn/api/monitor/usage/quota/limit';
+        const res = await fetch(endpoint, {
+            method: 'GET',
+            headers: {
+                Authorization: apiKey,
+                Accept: 'application/json',
+            },
+        });
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw new Error(`GLM API error ${res.status}: ${text || res.statusText}`);
+        }
+        const json = (await res.json());
+        if (!json.success) {
+            throw new Error(`GLM API error: ${json.msg || 'unknown'}`);
+        }
+        const windows = [];
+        let totalPercent = null;
+        let totalLimit = null;
+        let totalRemaining = null;
+        let totalResetAt = null;
+        const limits = json.data?.limits ?? [];
+        let tokensIndex = 0;
+        for (const limit of limits) {
+            if (limit.type === 'TOKENS_LIMIT') {
+                const limitVal = limit.usage;
+                const remaining = limit.remaining;
+                const percent = Math.min(100, Math.round(limit.percentage));
+                const resetAt = limit.nextResetTime > 0 ? new Date(limit.nextResetTime) : null;
+                if (tokensIndex === 0) {
+                    windows.push({
+                        label: '5h',
+                        percent,
+                        remaining,
+                        limit: limitVal,
+                        resetAt,
+                    });
+                    totalPercent = percent;
+                    totalLimit = limitVal;
+                    totalRemaining = remaining;
+                    totalResetAt = resetAt;
+                }
+                else if (tokensIndex === 1) {
+                    windows.push({
+                        label: '7d',
+                        percent,
+                        remaining,
+                        limit: limitVal,
+                        resetAt,
+                    });
+                }
+                tokensIndex++;
+            }
+            else if (limit.type === 'TIME_LIMIT') {
+                const limitVal = limit.usage;
+                const current = limit.currentValue;
+                const remaining = limit.remaining;
+                const percent = limitVal > 0 ? Math.min(100, Math.round((current / limitVal) * 100)) : 0;
+                windows.push({
+                    label: 'mcp',
+                    percent,
+                    remaining,
+                    limit: limitVal,
+                    resetAt: limit.nextResetTime > 0 ? new Date(limit.nextResetTime) : null,
+                });
+            }
+        }
+        return {
+            totalPercent,
+            totalLimit,
+            totalRemaining,
+            totalResetAt,
+            windows,
+        };
+    },
+};
 // ─── Provider Registry ─────────────────────────────────────────────────────────
 const providers = new Map();
 function registerProvider(provider) {
@@ -175,6 +254,7 @@ function registerProvider(provider) {
 }
 // Register built-in providers
 registerProvider(kimiProvider);
+registerProvider(glmProvider);
 function detectProviderFromSettings() {
     const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
     if (!fs.existsSync(settingsPath))
@@ -189,6 +269,10 @@ function detectProviderFromSettings() {
         // Detect Kimi
         if (baseUrl.includes('kimi.com')) {
             return { name: 'kimi', apiKey: token, baseUrl };
+        }
+        // Detect GLM
+        if (baseUrl.includes('bigmodel.cn')) {
+            return { name: 'glm', apiKey: token, baseUrl };
         }
         // Future: add more provider detections here
         // if (baseUrl.includes('minimaxi.com')) return { name: 'minimax', apiKey: token, baseUrl };

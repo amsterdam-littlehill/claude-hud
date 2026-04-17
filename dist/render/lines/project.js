@@ -64,6 +64,7 @@ function formatCompactProvider(provider) {
         openai: 'OA',
         google: 'Goo',
         kimi: 'Kim',
+        glm: 'GLM',
     };
     const normalized = provider.toLowerCase();
     return map[normalized] || provider.slice(0, 3);

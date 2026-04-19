@@ -8,6 +8,7 @@ export const DEFAULT_ELEMENT_ORDER = [
     'usage',
     'memory',
     'environment',
+    'stats',
     'tools',
     'agents',
     'todos',
@@ -48,6 +49,7 @@ export const DEFAULT_CONFIG = {
         showMemoryUsage: false,
         showSessionTokens: false,
         showOutputStyle: false,
+        showStats: true,
         autocompactBuffer: 'enabled',
         usageThreshold: 0,
         sevenDayThreshold: 80,
@@ -266,6 +268,9 @@ export function mergeConfig(userConfig) {
         showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
             ? migrated.display.showOutputStyle
             : DEFAULT_CONFIG.display.showOutputStyle,
+        showStats: typeof migrated.display?.showStats === 'boolean'
+            ? migrated.display.showStats
+            : DEFAULT_CONFIG.display.showStats,
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer
             : DEFAULT_CONFIG.display.autocompactBuffer,

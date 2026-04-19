@@ -15,6 +15,7 @@ import {
   renderUsageLine,
   renderMemoryLine,
   renderSessionTokensLine,
+  renderStatsLine,
 } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 // eslint-disable-next-line no-control-regex
@@ -353,6 +354,8 @@ function renderElementLine(ctx: RenderContext, element: HudElement, terminalWidt
       return renderMemoryLine(ctx);
     case 'environment':
       return renderEnvironmentLine(ctx);
+    case 'stats':
+      return display?.showStats === false ? null : renderStatsLine(ctx);
     case 'tools':
       return display?.showTools === false ? null : renderToolsLine(ctx);
     case 'agents':

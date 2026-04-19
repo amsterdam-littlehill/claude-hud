@@ -4,7 +4,7 @@ import { renderToolsLine } from './tools-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
 import { renderBuddyColumn } from './lines/buddy.js';
-import { renderIdentityLine, renderProjectLine, renderGitFilesLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, } from './lines/index.js';
+import { renderIdentityLine, renderProjectLine, renderGitFilesLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, renderStatsLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
@@ -290,6 +290,8 @@ function renderElementLine(ctx, element, terminalWidth = null) {
             return renderMemoryLine(ctx);
         case 'environment':
             return renderEnvironmentLine(ctx);
+        case 'stats':
+            return display?.showStats === false ? null : renderStatsLine(ctx);
         case 'tools':
             return display?.showTools === false ? null : renderToolsLine(ctx);
         case 'agents':

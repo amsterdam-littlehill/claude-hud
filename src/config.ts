@@ -18,7 +18,7 @@ export type UsageDisplayMode = 'basic' | 'compact' | 'table' | 'badge';
  *   short:   Strip context suffix AND "Claude " prefix (e.g. "Opus 4.6")
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
-export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'stats' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'dim'
   | 'red'
@@ -52,6 +52,7 @@ export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
   'usage',
   'memory',
   'environment',
+  'stats',
   'tools',
   'agents',
   'todos',
@@ -94,6 +95,7 @@ export interface HudConfig {
     showMemoryUsage: boolean;
     showSessionTokens: boolean;
     showOutputStyle: boolean;
+    showStats: boolean;
     autocompactBuffer: AutocompactBufferMode;
     usageThreshold: number;
     sevenDayThreshold: number;
@@ -141,6 +143,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showMemoryUsage: false,
     showSessionTokens: false,
     showOutputStyle: false,
+    showStats: true,
     autocompactBuffer: 'enabled',
     usageThreshold: 0,
     sevenDayThreshold: 80,
@@ -383,6 +386,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
       ? migrated.display.showOutputStyle
       : DEFAULT_CONFIG.display.showOutputStyle,
+    showStats: typeof migrated.display?.showStats === 'boolean'
+      ? migrated.display.showStats
+      : DEFAULT_CONFIG.display.showStats,
     autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
       ? migrated.display.autocompactBuffer
       : DEFAULT_CONFIG.display.autocompactBuffer,

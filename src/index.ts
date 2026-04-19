@@ -48,12 +48,16 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
   };
 
   try {
-    const stdin = await deps.readStdin();
+    // Phase 1: load config + read stdin in parallel (independent I/O)
+    const [config, stdin] = await Promise.all([
+      deps.loadConfig(),
+      deps.readStdin(),
+    ]);
+
+    setLanguage(config.language);
 
     if (!stdin) {
       // Running without stdin - this happens during setup verification
-      const config = await deps.loadConfig();
-      setLanguage(config.language);
       const isMacOS = process.platform === "darwin";
       deps.log(t("init.initializing"));
       if (isMacOS) {
@@ -63,46 +67,54 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     }
 
     const transcriptPath = stdin.transcript_path ?? "";
-    const transcript = await deps.parseTranscript(transcriptPath);
 
-    const { claudeMdCount, rulesCount, mcpCount, hooksCount, outputStyle } =
-      await deps.countConfigs(stdin.cwd);
-
-    const config = await deps.loadConfig();
-    setLanguage(config.language);
-    const gitStatus = config.gitStatus.enabled
-      ? await deps.getGitStatus(stdin.cwd)
-      : null;
-
-    // Usage: prefer Claude Code's official stdin rate_limits,
-    // fall back to provider-based API fetch for third-party providers (e.g. Kimi).
-    let usageData: RenderContext["usageData"] = null;
-    if (config.display.showUsage !== false) {
-      usageData = deps.getUsageFromStdin(stdin);
-      // If stdin has no rate_limits, try provider-based usage (Kimi, etc.)
-      if (!usageData) {
-        try {
-          usageData = await fetchProviderUsage();
-        } catch {
-          // Silently ignore provider fetch errors — HUD still works without usage
-        }
+    // Phase 2: all independent data sources fetched in parallel
+    const providerUsagePromise = (async (): Promise<RenderContext["usageData"]> => {
+      if (config.display.showUsage === false) return null;
+      const fromStdin = deps.getUsageFromStdin(stdin);
+      if (fromStdin) return fromStdin;
+      try {
+        return await fetchProviderUsage();
+      } catch {
+        return null;
       }
-    }
+    })();
 
     const extraCmd = deps.parseExtraCmdArg();
-    const extraLabel = extraCmd ? await deps.runExtraCmd(extraCmd) : null;
+    const extraLabelPromise = extraCmd
+      ? deps.runExtraCmd(extraCmd)
+      : Promise.resolve(null);
+
+    const [
+      transcript,
+      configCounts,
+      gitStatus,
+      usageData,
+      claudeCodeVersion,
+      memoryUsage,
+      extraLabel,
+    ] = await Promise.all([
+      deps.parseTranscript(transcriptPath),
+      deps.countConfigs(stdin.cwd),
+      config.gitStatus.enabled
+        ? deps.getGitStatus(stdin.cwd)
+        : Promise.resolve(null),
+      providerUsagePromise,
+      config.display.showClaudeCodeVersion
+        ? deps.getClaudeCodeVersion()
+        : Promise.resolve(undefined),
+      config.display.showMemoryUsage && config.lineLayout === "expanded"
+        ? deps.getMemoryUsage()
+        : Promise.resolve(null),
+      extraLabelPromise,
+    ]);
+
+    const { claudeMdCount, rulesCount, mcpCount, hooksCount, outputStyle } = configCounts;
 
     const sessionDuration = formatSessionDuration(
       transcript.sessionStart,
       deps.now,
     );
-    const claudeCodeVersion = config.display.showClaudeCodeVersion
-      ? await deps.getClaudeCodeVersion()
-      : undefined;
-    const memoryUsage =
-      config.display.showMemoryUsage && config.lineLayout === "expanded"
-        ? await deps.getMemoryUsage()
-        : null;
 
     const ctx: RenderContext = {
       stdin,

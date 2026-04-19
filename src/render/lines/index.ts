@@ -5,3 +5,4 @@ export { renderUsageLine } from './usage.js';
 export { renderMemoryLine } from './memory.js';
 export { renderSessionTokensLine } from './session-tokens.js';
 export { renderBuddyLine } from './buddy.js';
+export { renderStatsLine } from '../stats-line.js';

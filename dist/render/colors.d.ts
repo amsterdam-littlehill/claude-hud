@@ -1,5 +1,10 @@
 import type { HudColorOverrides } from '../config.js';
 export declare const RESET = "\u001B[0m";
+declare const BOLD = "\u001B[1m";
+declare const BLINK = "\u001B[5m";
+declare const UNDERLINE = "\u001B[4m";
+declare const INVERSE = "\u001B[7m";
+export { BOLD, BLINK, UNDERLINE, INVERSE };
 export declare function green(text: string): string;
 export declare function yellow(text: string): string;
 export declare function red(text: string): string;

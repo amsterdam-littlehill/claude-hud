@@ -168,15 +168,15 @@ function renderUsageBadge(ctx: RenderContext): string {
 
   const weekLine =
     ctx.usageData?.sevenDay !== null
-      ? `W:  ${quotaBar(ctx.usageData!.sevenDay!, barWidth, colors)} ${weekVal}${weekReset ? ` (${weekReset})` : ""}`
+      ? `W:  ${weekVal}${weekReset ? ` (${weekReset})` : ""}`
       : "";
   const fiveHourLine =
     ctx.usageData?.fiveHour !== null
-      ? `5H: ${quotaBar(ctx.usageData!.fiveHour!, barWidth, colors)} ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`
+      ? `5H: ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`
       : "";
 
-  const rawWeek = `W:  ${"█".repeat(barWidth)} ${weekVal}${weekReset ? ` (${weekReset})` : ""}`;
-  const rawFiveHour = `5H: ${"█".repeat(barWidth)} ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`;
+  const rawWeek = `W:  ${weekVal}${weekReset ? ` (${weekReset})` : ""}`;
+  const rawFiveHour = `5H: ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`;
   const innerWidth = Math.max(title.length, rawWeek.length, rawFiveHour.length);
 
   const top = "┌ " + title.padEnd(innerWidth) + " ┐";
@@ -287,16 +287,10 @@ function formatUsageWindowPart({
   const reset = formatResetTime(resetAt);
   const styledLabel = label(windowLabel, colors);
 
-  if (usageBarEnabled) {
-    const body = reset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
-    return forceLabel ? `${styledLabel} ${body}` : body;
-  }
-
-  return reset
-    ? `${styledLabel} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
-    : `${styledLabel} ${usageDisplay}`;
+  const body = reset
+    ? `${usageDisplay} (${t("format.resetsIn")} ${reset})`
+    : `${usageDisplay}`;
+  return forceLabel ? `${styledLabel} ${body}` : body;
 }
 
 function formatResetTime(resetAt: Date | null): string {

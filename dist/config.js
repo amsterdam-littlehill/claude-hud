@@ -42,6 +42,7 @@ export const DEFAULT_CONFIG = {
         showTools: false,
         showAgents: false,
         showTodos: false,
+        showBuddy: true,
         showSessionName: false,
         showClaudeCodeVersion: false,
         showMemoryUsage: false,
@@ -247,6 +248,9 @@ export function mergeConfig(userConfig) {
         showTodos: typeof migrated.display?.showTodos === 'boolean'
             ? migrated.display.showTodos
             : DEFAULT_CONFIG.display.showTodos,
+        showBuddy: typeof migrated.display?.showBuddy === 'boolean'
+            ? migrated.display.showBuddy
+            : DEFAULT_CONFIG.display.showBuddy,
         showSessionName: typeof migrated.display?.showSessionName === 'boolean'
             ? migrated.display.showSessionName
             : DEFAULT_CONFIG.display.showSessionName,

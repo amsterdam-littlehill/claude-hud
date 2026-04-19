@@ -2,7 +2,7 @@ import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, formatModelName, getProviderLabel, getTotalTokens } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET } from './colors.js';
+import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, custom as customColor, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
 import { t } from '../i18n/index.js';
@@ -313,16 +313,10 @@ function formatUsageWindowPart({
   const reset = formatResetTime(resetAt);
   const styledLabel = label(windowLabel, colors);
 
-  if (usageBarEnabled) {
-    const body = reset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${reset} / ${windowLabel})`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
-    return forceLabel ? `${styledLabel} ${body}` : body;
-  }
-
-  return reset
-    ? `${styledLabel} ${usageDisplay} (${t('format.resetsIn')} ${reset})`
-    : `${styledLabel} ${usageDisplay}`;
+  const body = reset
+    ? `${usageDisplay} (${reset})`
+    : `${usageDisplay}`;
+  return forceLabel ? `${styledLabel} ${body}` : body;
 }
 
 function formatResetTime(resetAt: Date | null): string {

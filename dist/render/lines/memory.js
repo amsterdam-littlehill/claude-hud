@@ -1,6 +1,5 @@
 import { formatBytes } from "../../memory.js";
-import { label, getQuotaColor, quotaBar, RESET } from "../colors.js";
-import { getAdaptiveBarWidth } from "../../utils/terminal.js";
+import { label, getQuotaColor, RESET } from "../colors.js";
 import { t } from "../../i18n/index.js";
 export function renderMemoryLine(ctx) {
     const display = ctx.config?.display;
@@ -17,7 +16,6 @@ export function renderMemoryLine(ctx) {
     const memoryLabel = label(t("label.approxRam"), colors);
     const percentColor = getQuotaColor(ctx.memoryUsage.usedPercent, colors);
     const percent = `${percentColor}${ctx.memoryUsage.usedPercent}%${RESET}`;
-    const bar = quotaBar(ctx.memoryUsage.usedPercent, getAdaptiveBarWidth(), colors);
-    return `${memoryLabel} ${bar} ${formatBytes(ctx.memoryUsage.usedBytes)} / ${formatBytes(ctx.memoryUsage.totalBytes)} (${percent})`;
+    return `${memoryLabel} ${formatBytes(ctx.memoryUsage.usedBytes)} / ${formatBytes(ctx.memoryUsage.totalBytes)} (${percent})`;
 }
 //# sourceMappingURL=memory.js.map

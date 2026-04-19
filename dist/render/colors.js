@@ -1,5 +1,9 @@
 export const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
+const BOLD = '\x1b[1m';
+const BLINK = '\x1b[5m';
+const UNDERLINE = '\x1b[4m';
+const INVERSE = '\x1b[7m';
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
@@ -8,6 +12,7 @@ const CYAN = '\x1b[36m';
 const BRIGHT_BLUE = '\x1b[94m';
 const BRIGHT_MAGENTA = '\x1b[95m';
 const CLAUDE_ORANGE = '\x1b[38;5;208m';
+export { BOLD, BLINK, UNDERLINE, INVERSE };
 const ANSI_BY_NAME = {
     dim: DIM,
     red: RED,

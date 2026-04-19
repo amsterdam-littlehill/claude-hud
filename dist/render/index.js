@@ -3,9 +3,9 @@ import { renderSessionLine } from './session-line.js';
 import { renderToolsLine } from './tools-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
+import { renderBuddyColumn } from './lines/buddy.js';
 import { renderIdentityLine, renderProjectLine, renderGitFilesLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
-import { UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
 // eslint-disable-next-line no-control-regex
@@ -31,7 +31,7 @@ function getTerminalWidth() {
     if (Number.isFinite(envColumns) && envColumns > 0) {
         return envColumns;
     }
-    return UNKNOWN_TERMINAL_WIDTH;
+    return null;
 }
 function splitAnsiTokens(str) {
     const tokens = [];
@@ -277,11 +277,11 @@ function collectActivityLines(ctx) {
     }
     return activityLines;
 }
-function renderElementLine(ctx, element) {
+function renderElementLine(ctx, element, terminalWidth = null) {
     const display = ctx.config?.display;
     switch (element) {
         case 'project':
-            return renderProjectLine(ctx);
+            return renderProjectLine(ctx, terminalWidth);
         case 'context':
             return renderIdentityLine(ctx);
         case 'usage':
@@ -320,8 +320,8 @@ function renderExpanded(ctx, terminalWidth = null) {
             || (element === 'usage' && nextElement === 'context' && !seen.has('context'))) {
             seen.add(element);
             seen.add(nextElement);
-            const firstLine = renderElementLine(ctx, element);
-            const secondLine = renderElementLine(ctx, nextElement);
+            const firstLine = renderElementLine(ctx, element, terminalWidth);
+            const secondLine = renderElementLine(ctx, nextElement, terminalWidth);
             if (firstLine && secondLine) {
                 const hasMultiline = firstLine.includes('\n') || secondLine.includes('\n');
                 const combinedLine = `${firstLine} │ ${secondLine}`;
@@ -343,7 +343,7 @@ function renderExpanded(ctx, terminalWidth = null) {
             continue;
         }
         seen.add(element);
-        const line = renderElementLine(ctx, element);
+        const line = renderElementLine(ctx, element, terminalWidth);
         if (!line) {
             continue;
         }
@@ -363,9 +363,35 @@ export function render(ctx) {
     const lineLayout = ctx.config?.lineLayout ?? 'expanded';
     const showSeparators = ctx.config?.showSeparators ?? false;
     const terminalWidth = getTerminalWidth();
+    // Buddy column: adaptive detail level based on available space.
+    // Tries full → compact → mini, giving up if even mini won't fit.
+    const showBuddy = ctx.config?.display?.showBuddy !== false;
+    let buddyColumn = null;
+    let buddyWidth = 0;
+    const buddyPadding = 1;
+    const STATUS_MIN_WIDTH = 15;
+    if (showBuddy) {
+        const levels = ['full', 'compact', 'mini'];
+        for (const level of levels) {
+            const col = renderBuddyColumn(level);
+            if (!col)
+                continue;
+            const needed = col.width + buddyPadding + STATUS_MIN_WIDTH;
+            // Unknown width → show the highest level; known width → must fit.
+            if (terminalWidth === null || terminalWidth >= needed) {
+                buddyColumn = col;
+                buddyWidth = col.width;
+                break;
+            }
+        }
+    }
+    const hasBuddy = buddyColumn !== null;
+    const statusWidth = hasBuddy && terminalWidth !== null
+        ? terminalWidth - buddyWidth - buddyPadding
+        : terminalWidth;
     let lines;
     if (lineLayout === 'expanded') {
-        const renderedLines = renderExpanded(ctx, terminalWidth);
+        const renderedLines = renderExpanded(ctx, statusWidth);
         lines = renderedLines.map(({ line }) => line);
         // Session token usage (cumulative)
         if (ctx.config?.display?.showSessionTokens) {
@@ -380,8 +406,8 @@ export function render(ctx) {
                 const separatorBaseWidth = Math.max(...renderedLines
                     .slice(0, firstActivityIndex)
                     .map(({ line }) => visualLength(line)), 20);
-                const separatorWidth = terminalWidth
-                    ? Math.min(separatorBaseWidth, terminalWidth)
+                const separatorWidth = statusWidth
+                    ? Math.min(separatorBaseWidth, statusWidth)
                     : separatorBaseWidth;
                 lines.splice(firstActivityIndex, 0, makeSeparator(separatorWidth));
             }
@@ -393,16 +419,31 @@ export function render(ctx) {
         lines = [...headerLines];
         if (showSeparators && activityLines.length > 0) {
             const maxWidth = Math.max(...headerLines.map(visualLength), 20);
-            const separatorWidth = terminalWidth ? Math.min(maxWidth, terminalWidth) : maxWidth;
+            const separatorWidth = statusWidth ? Math.min(maxWidth, statusWidth) : maxWidth;
             lines.push(makeSeparator(separatorWidth));
         }
         lines.push(...activityLines);
     }
     const physicalLines = lines.flatMap(line => line.split('\n'));
-    const visibleLines = physicalLines.flatMap(line => wrapLineToWidth(line, terminalWidth));
-    for (const line of visibleLines) {
-        const outputLine = `${RESET}${line}`;
-        console.log(outputLine);
+    const visibleLines = statusWidth !== null
+        ? physicalLines.flatMap(line => wrapLineToWidth(line, statusWidth))
+        : physicalLines;
+    // Fastfetch-style side-by-side: buddy only on lines where it has content
+    const buddyLines = buddyColumn?.lines ?? [];
+    const maxLines = Math.max(visibleLines.length, buddyLines.length);
+    const maxStatusLen = Math.max(...visibleLines.map(visualLength), 0);
+    const BUDDY_GAP = 2;
+    for (let i = 0; i < maxLines; i++) {
+        const statusLine = visibleLines[i] ?? '';
+        const buddyLine = buddyLines[i] ?? '';
+        if (buddyLine) {
+            const statusVisualLen = visualLength(statusLine);
+            const padding = ' '.repeat(Math.max(0, maxStatusLen - statusVisualLen + BUDDY_GAP));
+            console.log(`${RESET}${statusLine}${padding}${buddyLine}`);
+        }
+        else {
+            console.log(`${RESET}${statusLine}`);
+        }
     }
 }
 //# sourceMappingURL=index.js.map

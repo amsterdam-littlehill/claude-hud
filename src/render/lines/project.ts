@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { RenderContext } from '../../types.js';
 import { getModelName, formatModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
-import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, getQuotaColor, quotaBar, RESET } from '../colors.js';
+import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, getQuotaColor, RESET } from '../colors.js';
 import { getAdaptiveBarWidth } from '../../utils/terminal.js';
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
@@ -95,10 +95,11 @@ function hyperlink(uri: string, text: string): string {
   return `${esc}]8;;${uri}${esc}${st}${text}${esc}]8;;${esc}${st}`;
 }
 
-export function renderProjectLine(ctx: RenderContext): string | null {
+export function renderProjectLine(ctx: RenderContext, terminalWidth: number | null = null): string | null {
   const display = ctx.config?.display;
   const colors = ctx.config?.colors;
-  const parts: string[] = [];
+  const headerParts: string[] = [];
+  const metaParts: string[] = [];
 
   if (display?.showModel !== false) {
     const model = formatModelName(getModelName(ctx.stdin), ctx.config?.display?.modelFormat, ctx.config?.display?.modelOverride);
@@ -137,12 +138,16 @@ export function renderProjectLine(ctx: RenderContext): string | null {
         const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, ctx.usageData.fiveHour);
         const weekReset = formatResetTimePrecise(ctx.usageData.sevenDayResetAt ?? null);
         const fiveHourReset = formatResetTimePrecise(ctx.usageData.fiveHourResetAt ?? null);
+        // On narrow terminals skip reset times to keep the line compact
+        const showReset = terminalWidth === null || terminalWidth >= 100;
         const usageParts: string[] = [];
         if (ctx.usageData.sevenDay !== null) {
-          usageParts.push(`W:${quotaBar(ctx.usageData.sevenDay, barWidth, colors)} ${weekVal}${weekReset ? `(${weekReset})` : ''}`);
+          const part = `W: ${weekVal}`;
+          usageParts.push(showReset && weekReset ? `${part} (${weekReset})` : part);
         }
         if (ctx.usageData.fiveHour !== null) {
-          usageParts.push(`5H:${quotaBar(ctx.usageData.fiveHour, barWidth, colors)} ${fiveHourVal}${fiveHourReset ? `(${fiveHourReset})` : ''}`);
+          const part = `5H: ${fiveHourVal}`;
+          usageParts.push(showReset && fiveHourReset ? `${part} (${fiveHourReset})` : part);
         }
         if (usageParts.length > 0) {
           usagePart = usageParts.join(' ');
@@ -150,9 +155,9 @@ export function renderProjectLine(ctx: RenderContext): string | null {
       }
     }
 
-    parts.push(modelDisplay);
+    headerParts.push(modelDisplay);
     if (usagePart) {
-      parts.push(usagePart);
+      headerParts.push(usagePart);
     }
   }
 
@@ -196,51 +201,53 @@ export function renderProjectLine(ctx: RenderContext): string | null {
   }
 
   if (projectPart && gitPart) {
-    parts.push(`${projectPart} ${gitPart}`);
+    metaParts.push(`${projectPart} ${gitPart}`);
   } else if (projectPart) {
-    parts.push(projectPart);
+    metaParts.push(projectPart);
   } else if (gitPart) {
-    parts.push(gitPart);
+    metaParts.push(gitPart);
   }
 
   if (display?.showSessionName && ctx.transcript.sessionName) {
-    parts.push(label(ctx.transcript.sessionName, colors));
+    metaParts.push(label(ctx.transcript.sessionName, colors));
   }
 
   if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
-    parts.push(label(`CC v${ctx.claudeCodeVersion}`, colors));
+    metaParts.push(label(`CC v${ctx.claudeCodeVersion}`, colors));
   }
 
   if (ctx.extraLabel) {
-    parts.push(label(ctx.extraLabel, colors));
+    metaParts.push(label(ctx.extraLabel, colors));
   }
 
   if (display?.showSpeed) {
     const speed = getOutputSpeed(ctx.stdin);
     if (speed !== null) {
-      parts.push(label(`${t('format.out')}: ${speed.toFixed(1)} ${t('format.tokPerSec')}`, colors));
+      metaParts.push(label(`${t('format.out')}: ${speed.toFixed(1)} ${t('format.tokPerSec')}`, colors));
     }
   }
 
   if (display?.showDuration !== false && ctx.sessionDuration) {
-    parts.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
+    metaParts.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
   }
 
   const costEstimate = renderCostEstimate(ctx);
   if (costEstimate) {
-    parts.push(costEstimate);
+    metaParts.push(costEstimate);
   }
 
   const customLine = display?.customLine;
   if (customLine) {
-    parts.push(customColor(customLine, colors));
+    metaParts.push(customColor(customLine, colors));
   }
 
-  if (parts.length === 0) {
-    return null;
-  }
+  const headerLine = headerParts.length > 0 ? headerParts.join(' \u2502 ') : null;
+  const metaLine = metaParts.length > 0 ? metaParts.join(' \u2502 ') : null;
 
-  return parts.join(' \u2502 ');
+  if (headerLine && metaLine) {
+    return `${headerLine}\n${metaLine}`;
+  }
+  return headerLine ?? metaLine ?? null;
 }
 
 function formatAheadCount(

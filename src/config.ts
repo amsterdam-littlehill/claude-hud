@@ -88,6 +88,7 @@ export interface HudConfig {
     showTools: boolean;
     showAgents: boolean;
     showTodos: boolean;
+    showBuddy: boolean;
     showSessionName: boolean;
     showClaudeCodeVersion: boolean;
     showMemoryUsage: boolean;
@@ -134,6 +135,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showTools: false,
     showAgents: false,
     showTodos: false,
+    showBuddy: true,
     showSessionName: false,
     showClaudeCodeVersion: false,
     showMemoryUsage: false,
@@ -363,6 +365,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showTodos: typeof migrated.display?.showTodos === 'boolean'
       ? migrated.display.showTodos
       : DEFAULT_CONFIG.display.showTodos,
+    showBuddy: typeof migrated.display?.showBuddy === 'boolean'
+      ? migrated.display.showBuddy
+      : DEFAULT_CONFIG.display.showBuddy,
     showSessionName: typeof migrated.display?.showSessionName === 'boolean'
       ? migrated.display.showSessionName
       : DEFAULT_CONFIG.display.showSessionName,

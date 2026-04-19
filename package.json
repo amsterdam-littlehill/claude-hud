@@ -12,11 +12,19 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
+    "sync": "node scripts/sync-to-plugin.js",
+    "dev": "npm run build && npm run sync",
+    "watch": "tsc --watch",
     "test": "npm run build && node --test",
     "test:coverage": "npm run build && c8 --reporter=text --reporter=lcov node --test",
     "test:update-snapshots": "UPDATE_SNAPSHOTS=1 npm test",
-    "test:stdin": "npm run build && echo '{\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"current_usage\":{\"input_tokens\":45000},\"context_window_size\":200000},\"transcript_path\":\"/tmp/test.jsonl\"}' | node dist/index.js"
+    "test:stdin": "npm run build && node scripts/test-stdin.js basic",
+    "test:stdin:high-context": "npm run build && node scripts/test-stdin.js high-context",
+    "test:stdin:usage": "npm run build && node scripts/test-stdin.js usage",
+    "test:stdin:high-usage": "npm run build && node scripts/test-stdin.js high-usage",
+    "test:stdin:kimi": "npm run build && node scripts/test-stdin.js kimi",
+    "test:stdin:no-stdin": "npm run build && node scripts/test-stdin.js no-stdin",
+    "test:buddy": "npm run build && node scripts/test-buddy.js"
   },
   "keywords": [
     "claude-code",

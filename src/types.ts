@@ -1,6 +1,20 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
 
+export interface BuddyStdinData {
+  enabled: boolean;
+  tick: number;
+  reaction?: string;
+  petAt?: number;
+  companion?: {
+    name: string;
+    personality: string;
+    hatchedAt: number;
+  };
+  muted?: boolean;
+  userId?: string;
+}
+
 export interface StdinData {
   transcript_path?: string;
   cwd?: string;
@@ -37,6 +51,7 @@ export interface StdinData {
       resets_at?: number | null;
     } | null;
   } | null;
+  buddy?: BuddyStdinData;
 }
 
 export interface ToolEntry {

@@ -1,6 +1,6 @@
 import { isLimitReached } from "../../types.js";
 import { getProviderLabel, getModelName, formatModelName } from "../../stdin.js";
-import { critical, label, getQuotaColor, quotaBar, RESET } from "../colors.js";
+import { critical, label, getQuotaColor, RESET } from "../colors.js";
 import { getAdaptiveBarWidth } from "../../utils/terminal.js";
 import { t } from "../../i18n/index.js";
 import { getDetectedProviderName } from "../../provider-usage.js";
@@ -112,13 +112,13 @@ function renderUsageBadge(ctx) {
     const weekReset = formatResetTimePrecise(ctx.usageData?.sevenDayResetAt ?? null);
     const fiveHourReset = formatResetTimePrecise(ctx.usageData?.fiveHourResetAt ?? null);
     const weekLine = ctx.usageData?.sevenDay !== null
-        ? `W:  ${quotaBar(ctx.usageData.sevenDay, barWidth, colors)} ${weekVal}${weekReset ? ` (${weekReset})` : ""}`
+        ? `W:  ${weekVal}${weekReset ? ` (${weekReset})` : ""}`
         : "";
     const fiveHourLine = ctx.usageData?.fiveHour !== null
-        ? `5H: ${quotaBar(ctx.usageData.fiveHour, barWidth, colors)} ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`
+        ? `5H: ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`
         : "";
-    const rawWeek = `W:  ${"█".repeat(barWidth)} ${weekVal}${weekReset ? ` (${weekReset})` : ""}`;
-    const rawFiveHour = `5H: ${"█".repeat(barWidth)} ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`;
+    const rawWeek = `W:  ${weekVal}${weekReset ? ` (${weekReset})` : ""}`;
+    const rawFiveHour = `5H: ${fiveHourVal}${fiveHourReset ? ` (${fiveHourReset})` : ""}`;
     const innerWidth = Math.max(title.length, rawWeek.length, rawFiveHour.length);
     const top = "┌ " + title.padEnd(innerWidth) + " ┐";
     const mid1 = "│ " + padEndVisible(weekLine, innerWidth) + " │";
@@ -191,15 +191,10 @@ function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, u
     const usageDisplay = formatUsagePercent(percent, colors);
     const reset = formatResetTime(resetAt);
     const styledLabel = label(windowLabel, colors);
-    if (usageBarEnabled) {
-        const body = reset
-            ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
-            : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
-        return forceLabel ? `${styledLabel} ${body}` : body;
-    }
-    return reset
-        ? `${styledLabel} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
-        : `${styledLabel} ${usageDisplay}`;
+    const body = reset
+        ? `${usageDisplay} (${t("format.resetsIn")} ${reset})`
+        : `${usageDisplay}`;
+    return forceLabel ? `${styledLabel} ${body}` : body;
 }
 function formatResetTime(resetAt) {
     if (!resetAt)

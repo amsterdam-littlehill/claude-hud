@@ -23,11 +23,5 @@ export function renderMemoryLine(ctx: RenderContext): string | null {
   const memoryLabel = label(t("label.approxRam"), colors);
   const percentColor = getQuotaColor(ctx.memoryUsage.usedPercent, colors);
   const percent = `${percentColor}${ctx.memoryUsage.usedPercent}%${RESET}`;
-  const bar = quotaBar(
-    ctx.memoryUsage.usedPercent,
-    getAdaptiveBarWidth(),
-    colors,
-  );
-
-  return `${memoryLabel} ${bar} ${formatBytes(ctx.memoryUsage.usedBytes)} / ${formatBytes(ctx.memoryUsage.totalBytes)} (${percent})`;
+  return `${memoryLabel} ${formatBytes(ctx.memoryUsage.usedBytes)} / ${formatBytes(ctx.memoryUsage.totalBytes)} (${percent})`;
 }

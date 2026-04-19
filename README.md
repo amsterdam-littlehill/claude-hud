@@ -76,9 +76,11 @@ Claude HUD gives you better insights into what's happening in your Claude Code s
 |--------------|----------------|
 | **Project path** | Know which project you're in (configurable 1-3 directory levels) |
 | **Context health** | Know exactly how full your context window is before it's too late |
+| **Stats** | Working indicator, last skill used, and lines changed |
 | **Tool activity** | Watch Claude read, edit, and search files as it happens |
 | **Agent tracking** | See which subagents are running and what they're doing |
 | **Todo progress** | Track task completion in real-time |
+| **Buddy** | A companion pet that lives in your HUD (3D ASCII with idle animation) |
 
 ## What You See
 
@@ -155,7 +157,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `language` | `en` \| `zh` | `en` | HUD label language. English is the default; set `zh` to enable Chinese labels. |
 | `lineLayout` | string | `expanded` | Layout: `expanded` (multi-line) or `compact` (single line) |
 | `pathLevels` | 1-3 | 1 | Directory levels to show in project path |
-| `elementOrder` | string[] | `["project","context","usage","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
+| `elementOrder` | string[] | `["project","context","usage","memory","environment","stats","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
 | `gitStatus.enabled` | boolean | true | Show git branch in HUD |
 | `gitStatus.showDirty` | boolean | true | Show `*` for uncommitted changes |
 | `gitStatus.showAheadBehind` | boolean | false | Show `↑N ↓N` for ahead/behind remote |
@@ -180,6 +182,18 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showSessionName` | boolean | false | Show session slug or custom title from `/rename` |
 | `display.showClaudeCodeVersion` | boolean | false | Show the installed Claude Code version, e.g. `CC v2.1.81` |
 | `display.showMemoryUsage` | boolean | false | Show an approximate system RAM usage line in expanded layout |
+| `display.showSessionTokens` | boolean | false | Show cumulative session token usage (input, output, cache creation, cache read) |
+| `display.showStats` | boolean | true | Show the stats line: working indicator, last skill invoked, and lines changed |
+| `display.showBuddy` | boolean | true | Show the companion pet (3D ASCII sprite with idle animation) in the HUD |
+| `display.showProject` | boolean | true | Show the project path in the HUD |
+| `display.autocompactBuffer` | `enabled` \| `disabled` | `enabled` | Automatically compact the buffer display |
+| `display.usageThreshold` | 0-100 | 0 | Minimum usage percentage before displaying usage info (0 = always show) |
+| `display.environmentThreshold` | 0-100 | 0 | Minimum environment count before displaying environment line (0 = always show) |
+| `display.modelFormat` | `full` \| `compact` \| `short` | `full` | Model name display format: `full` (raw display name), `compact` (strip context suffix), `short` (strip prefix and suffix) |
+| `display.modelOverride` | string | `""` | Override the displayed model name (max 80 chars) |
+| `display.customLine` | string | `""` | Custom text line to display in the HUD (max 80 chars) |
+| `display.usageDisplayMode` | `basic` \| `compact` \| `table` \| `badge` | `compact` | Usage rendering style for provider-based usage data |
+| `showSeparators` | boolean | false | Show separator lines between core info and activity lines |
 | `colors.context` | color value | `green` | Base color for the context bar and context percentage |
 | `colors.usage` | color value | `brightBlue` | Base color for usage bars and percentages below warning thresholds |
 | `colors.warning` | color value | `yellow` | Warning color for context thresholds and usage warning text |
@@ -197,6 +211,30 @@ Supported color names: `dim`, `red`, `green`, `yellow`, `magenta`, `cyan`, `brig
 `display.showMemoryUsage` is fully opt-in and only renders in `expanded` layout. It reports approximate system RAM usage from the local machine, not precise memory pressure inside Claude Code or a specific process. The number may overstate actual pressure because reclaimable OS cache and buffers can still be counted as used memory.
 
 `display.showCost` is fully opt-in. ClaudeHUD prefers the native `cost.total_cost_usd` field that Claude Code provides on stdin when it is available. If that field is absent or invalid for a direct Anthropic session, ClaudeHUD falls back to the existing local transcript-based estimate so the cost line still works on older payloads. The native field is absent before the first API response in a session, so the cost display may stay hidden until then. ClaudeHUD also keeps the cost hidden for known routed providers such as Bedrock, because cloud-provider billed sessions may report `$0.00` or omit the field even though the session was not literally free.
+
+### Stats Line
+
+The stats line (`display.showStats`, enabled by default) shows real-time session activity at a glance:
+
+- **Working indicator** (`◐`) — Appears when tools are actively running
+- **Last skill** — Name of the most recently completed tool
+- **Lines changed** — Cumulative lines added/removed from Claude Code's native cost data (`+N -M`)
+
+It only renders when there is activity to display.
+
+### Buddy (Companion Pet)
+
+`display.showBuddy` (enabled by default) adds a companion pet to the right side of your HUD. The buddy is a 3D ASCII sprite with idle animation (blinking, frame cycling) that adapts its detail level based on terminal width:
+
+- **Full** — fetch-style 3D sprite with rotating spherical shading
+- **Compact** — Flat sprite + face
+- **Mini** — Face only
+
+Set `display.showBuddy` to `false` to hide the companion.
+
+### Session Tokens
+
+`display.showSessionTokens` (disabled by default) shows cumulative token usage for the entire session: input tokens, output tokens, cache creation tokens, and cache read tokens. This is separate from the context bar and provides a running total of all tokens consumed in the session.
 
 ### Usage Limits
 
@@ -238,7 +276,7 @@ To disable, set `display.showUsage` to `false`.
   "language": "zh",
   "lineLayout": "expanded",
   "pathLevels": 2,
-  "elementOrder": ["project", "tools", "context", "usage", "memory", "environment", "agents", "todos"],
+  "elementOrder": ["project", "tools", "context", "usage", "memory", "environment", "stats", "agents", "todos"],
   "gitStatus": {
     "enabled": true,
     "showDirty": true,
@@ -251,7 +289,11 @@ To disable, set `display.showUsage` to `false`.
     "showTodos": true,
     "showConfigCounts": true,
     "showDuration": true,
-    "showMemoryUsage": true
+    "showMemoryUsage": true,
+    "showSessionTokens": true,
+    "showStats": true,
+    "showBuddy": true,
+    "modelFormat": "compact"
   },
   "colors": {
     "context": "cyan",

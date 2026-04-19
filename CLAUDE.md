@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-Claude HUD is a Claude Code plugin that displays a real-time multi-line statusline. It shows context health, tool activity, agent status, and todo progress.
+Claude HUD is a Claude Code plugin that displays a real-time multi-line statusline. It shows context health, stats, tool activity, agent status, todo progress, and a companion pet.
 
 ## Build Commands
 
@@ -57,20 +57,50 @@ Claude Code → stdin JSON → parse → render lines → stdout → Claude Code
 - `rate_limits.seven_day.used_percentage` - 7-day subscriber usage percentage
 - `rate_limits.seven_day.resets_at` - 7-day reset timestamp
 
+**From Claude Code stdin cost data**:
+- `cost.total_cost_usd` - Native session cost (when available)
+- `cost.total_lines_added` / `cost.total_lines_removed` - Cumulative lines changed
+- `cost.total_duration_ms` / `cost.total_api_duration_ms` - Session timing
+
+**From provider APIs** (when native rate_limits unavailable):
+- **Kimi** (`kimi.com`) - coding plan usage via `/v1/usages`
+- **GLM** (`bigmodel.cn`) - quota limits via `open.bigmodel.cn/api/monitor/usage/quota/limit`
+
 ### File Structure
 
 ```
 src/
-├── index.ts           # Entry point
-├── stdin.ts           # Parse Claude's JSON input
-├── transcript.ts      # Parse transcript JSONL
-├── config-reader.ts   # Read MCP/rules configs
-├── config.ts          # Load/validate user config
-├── git.ts             # Git status (branch, dirty, ahead/behind)
-├── types.ts           # TypeScript interfaces
+├── index.ts              # Entry point
+├── stdin.ts              # Parse Claude's JSON input
+├── transcript.ts         # Parse transcript JSONL
+├── config-reader.ts      # Read MCP/rules configs
+├── config.ts             # Load/validate user config
+├── git.ts                # Git status (branch, dirty, ahead/behind)
+├── types.ts              # TypeScript interfaces
+├── provider-usage.ts     # Fetch usage from Kimi/GLM APIs
+├── memory.ts             # System memory usage
+├── version.ts            # Claude Code version detection
+├── extra-cmd.ts          # Extra command label injection
+├── cost.ts               # Cost estimation fallback
+├── speed-tracker.ts      # Token speed tracking
+├── constants.ts          # Shared constants
+├── debug.ts              # Debug utilities
+├── claude-config-dir.ts  # Claude config directory detection
+├── i18n/                 # Internationalization
+│   ├── index.ts
+│   ├── types.ts
+│   ├── en.ts
+│   └── zh.ts
+├── buddy/                # Companion pet system
+│   ├── companion.ts
+│   ├── state.ts
+│   ├── sprites.ts
+│   ├── shape-vectors.ts
+│   └── types.ts
 └── render/
-    ├── index.ts       # Main render coordinator
+    ├── index.ts          # Main render coordinator
     ├── session-line.ts   # Compact mode: single line with all info
+    ├── stats-line.ts     # Working indicator + last skill + lines changed
     ├── tools-line.ts     # Tool activity (opt-in)
     ├── agents-line.ts    # Agent status (opt-in)
     ├── todos-line.ts     # Todo progress (opt-in)
@@ -80,7 +110,11 @@ src/
         ├── project.ts    # Line 1: model bracket + project + git
         ├── identity.ts   # Line 2a: context bar
         ├── usage.ts      # Line 2b: usage bar (combined with identity)
-        └── environment.ts # Config counts (opt-in)
+        ├── environment.ts # Config counts (opt-in)
+        ├── memory.ts      # RAM usage line (opt-in)
+        ├── session-tokens.ts # Cumulative token usage (opt-in)
+        ├── cost.ts        # Cost display line (opt-in)
+        └── buddy.ts       # Companion pet column rendering
 ```
 
 ### Output Format (default expanded layout)
@@ -91,10 +125,13 @@ Context █████░░░░░ 45% │ Usage ██░░░░░░░
 ```
 
 Lines 1-2 always shown. Additional lines are opt-in via config:
+- Stats line (`showStats`): ◐ | skill: Edit | +12 -3
 - Tools line (`showTools`): ◐ Edit: auth.ts | ✓ Read ×3
 - Agents line (`showAgents`): ◐ explore [haiku]: Finding auth code
 - Todos line (`showTodos`): ▸ Fix authentication bug (2/5)
 - Environment line (`showConfigCounts`): 2 CLAUDE.md | 4 rules
+- Session tokens line (`showSessionTokens`): in: 45k | out: 12k | cache: 8k
+- Buddy column (`showBuddy`): 3D ASCII companion pet with idle animation
 
 ### Context Thresholds
 

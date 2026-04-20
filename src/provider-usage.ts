@@ -61,7 +61,7 @@ export interface ProviderWindow {
 const CACHE_TTL_MS = 60_000;        // 1 minute — fresh cache lifetime
 const NEGATIVE_CACHE_TTL_MS = 30_000; // 30s — suppress retries after errors
 const STALE_CACHE_MAX_AGE_MS = 3_600_000; // 1 hour — stale cache fallback
-const LOCK_TIMEOUT_MS = 10_000;     // 10s — max wait for exclusive lock
+const LOCK_TIMEOUT_MS = 300;        // 300ms — match statusline refresh interval
 const API_TIMEOUT_MS = 15_000;      // 15s — API request timeout
 const LOCK_POLL_INTERVAL_MS = 50;   // 50ms — lock polling interval
 
@@ -146,6 +146,17 @@ function acquireLock(lockPath: string, timeoutMs: number): boolean {
       return true;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        // Stale lock cleanup by mtime (process may have been killed without releasing)
+        try {
+          const stat = fs.statSync(lockPath);
+          if (Date.now() - stat.mtime.getTime() > LOCK_TIMEOUT_MS * 2) {
+            fs.unlinkSync(lockPath);
+            continue;
+          }
+        } catch {
+          // can't stat or unlink
+        }
+
         try {
           const pidStr = fs.readFileSync(lockPath, 'utf-8').trim();
           const pid = Number.parseInt(pidStr, 10);
@@ -610,6 +621,11 @@ export async function fetchProviderUsage(): Promise<UsageData | null> {
   // Step 2: Acquire exclusive lock
   const lockAcquired = acquireLock(lockPath, LOCK_TIMEOUT_MS);
   if (!lockAcquired) {
+    // Another process may have written the cache while we were waiting — re-read
+    const postWaitCache = readCache(detected.name);
+    if (postWaitCache?.data) {
+      return mapToUsageData(postWaitCache.data);
+    }
     if (cached?.data) {
       return mapToUsageData(cached.data);
     }

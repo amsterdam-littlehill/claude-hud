@@ -1,19 +1,36 @@
 import type { RenderContext } from "../../types.js";
 import { isLimitReached } from "../../types.js";
-import { getProviderLabel, getModelName, formatModelName } from "../../stdin.js";
+import type { MessageKey } from "../../i18n/types.js";
+import { isBedrockModelId, getProviderLabel, getModelName, formatModelName } from "../../stdin.js";
 import { critical, label, getQuotaColor, quotaBar, RESET } from "../colors.js";
 import { getAdaptiveBarWidth } from "../../utils/terminal.js";
 import { t } from "../../i18n/index.js";
+import { progressLabel } from "./label-align.js";
+import type { TimeFormatMode } from "../../config.js";
+import { formatResetTime } from "../format-reset-time.js";
 import { getDetectedProviderName } from "../../provider-usage.js";
+import { formatUsageValue } from "../format-usage-value.js";
 
-export function renderUsageLine(ctx: RenderContext): string | null {
+export function renderUsageLine(
+  ctx: RenderContext,
+  alignLabels = false,
+): string | null {
   const display = ctx.config?.display;
+  const colors = ctx.config?.colors;
 
-  if (display?.showUsage === false || !ctx.usageData) {
+  if (display?.showUsage === false) {
     return null;
   }
 
-  const mode = display?.usageDisplayMode ?? "compact";
+  if (!ctx.usageData) {
+    return null;
+  }
+
+  if (isBedrockModelId(ctx.stdin.model?.id)) {
+    return null;
+  }
+
+  const mode = display?.usageDisplayMode;
 
   if (mode === "basic" || mode === "compact") {
     return null;
@@ -27,27 +44,107 @@ export function renderUsageLine(ctx: RenderContext): string | null {
     return renderUsageBadge(ctx);
   }
 
-  // Legacy fallback for official stdin usage without provider (rare with default compact)
-  if (!getProviderLabel(ctx.stdin) && !getDetectedProviderName()) {
-    return renderLegacyUsageLine(ctx);
+  // ─── Upstream legacy rendering (fallback) ───────────────────────────────────
+
+  const usageLabel = progressLabel("label.usage", colors, alignLabels);
+  const timeFormat: TimeFormatMode = display?.timeFormat ?? 'relative';
+  const showResetLabel = display?.showResetLabel ?? true;
+  const resetsKey = timeFormat === 'absolute' ? "format.resets" : "format.resetsIn";
+  const usageCompact = display?.usageCompact ?? false;
+
+  if (isLimitReached(ctx.usageData)) {
+    const resetTime =
+      ctx.usageData.fiveHour === 100
+        ? formatResetTime(ctx.usageData.fiveHourResetAt, timeFormat)
+        : formatResetTime(ctx.usageData.sevenDayResetAt, timeFormat);
+    if (usageCompact) {
+      return critical(`⚠ Limit${resetTime ? ` (${resetTime})` : ""}`, colors);
+    }
+    const resetSuffix = resetTime
+      ? showResetLabel
+        ? ` (${t(resetsKey)} ${resetTime})`
+        : ` (${resetTime})`
+      : "";
+    return `${usageLabel} ${critical(`⚠ ${t("status.limitReached")}${resetSuffix}`, colors)}`;
   }
 
-  return null;
+  const threshold = display?.usageThreshold ?? 0;
+  const fiveHour = ctx.usageData.fiveHour;
+  const sevenDay = ctx.usageData.sevenDay;
+
+  const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
+  if (effectiveUsage < threshold) {
+    return null;
+  }
+
+  const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
+
+  if (usageCompact) {
+    const fiveHourPart = fiveHour !== null
+      ? formatCompactWindowPart("5h", fiveHour, ctx.usageData.fiveHourResetAt, timeFormat, colors)
+      : null;
+    const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
+      ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, colors)
+      : null;
+
+    if (fiveHourPart && sevenDayPart) {
+      return `${fiveHourPart} | ${sevenDayPart}`;
+    }
+    return fiveHourPart ?? sevenDayPart ?? null;
+  }
+
+  const usageBarEnabled = display?.usageBarEnabled ?? true;
+  const barWidth = getAdaptiveBarWidth();
+
+  if (fiveHour === null && sevenDay !== null) {
+    const weeklyOnlyPart = formatUsageWindowPart({
+      label: t("label.weekly"),
+      labelKey: "label.weekly",
+      percent: sevenDay,
+      resetAt: ctx.usageData.sevenDayResetAt,
+      colors,
+      usageBarEnabled,
+      barWidth,
+      timeFormat,
+      showResetLabel,
+      forceLabel: true,
+      alignLabels,
+    });
+    return `${usageLabel} ${weeklyOnlyPart}`;
+  }
+
+  const fiveHourPart = formatUsageWindowPart({
+    label: "5h",
+    percent: fiveHour,
+    resetAt: ctx.usageData.fiveHourResetAt,
+    colors,
+    usageBarEnabled,
+    barWidth,
+    timeFormat,
+    showResetLabel,
+  });
+
+  if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
+    const sevenDayPart = formatUsageWindowPart({
+      label: t("label.weekly"),
+      labelKey: "label.weekly",
+      percent: sevenDay,
+      resetAt: ctx.usageData.sevenDayResetAt,
+      colors,
+      usageBarEnabled,
+      barWidth,
+      timeFormat,
+      showResetLabel,
+      forceLabel: true,
+      alignLabels,
+    });
+    return `${usageLabel} ${fiveHourPart} | ${sevenDayPart}`;
+  }
+
+  return `${usageLabel} ${fiveHourPart}`;
 }
 
-function formatUsageValue(
-  used?: number | null,
-  limit?: number | null,
-  percent?: number | null,
-): string {
-  if (typeof used === "number" && typeof limit === "number") {
-    return `${used}/${limit}`;
-  }
-  if (typeof percent === "number") {
-    return `${percent}%`;
-  }
-  return "--";
-}
+// ─── Local helper functions for provider usage display ─────────────────────────
 
 function formatResetTimePrecise(resetAt: Date | null): string {
   if (!resetAt) return "";
@@ -134,7 +231,8 @@ function renderUsageTable(ctx: RenderContext): string {
 
 function visibleLength(str: string): number {
   // Strip ANSI escape sequences for visible width calculation
-  return str.replace(/\x1b\[[0-9;]*m/g, "").length;
+  // Covers SGR (\x1b[...m) and OSC (\x1b]8;;...\x1b\\) sequences.
+  return str.replace(/(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/g, "").length;
 }
 
 function padEndVisible(str: string, targetWidth: number): string {
@@ -187,72 +285,21 @@ function renderUsageBadge(ctx: RenderContext): string {
   return [top, mid1, mid2, bottom].join("\n");
 }
 
-// ─── Legacy fallback for non-provider stdin usage ─────────────────────────────
+// ─── Upstream helper functions ─────────────────────────────────────────────────
 
-function renderLegacyUsageLine(ctx: RenderContext): string | null {
-  const display = ctx.config?.display;
-  const colors = ctx.config?.colors;
-
-  if (isLimitReached(ctx.usageData!)) {
-    const resetTime =
-      ctx.usageData!.fiveHour === 100
-        ? formatResetTime(ctx.usageData!.fiveHourResetAt)
-        : formatResetTime(ctx.usageData!.sevenDayResetAt);
-    return `${label(t("label.usage"), colors)} ${critical(
-      `⚠ ${t("status.limitReached")}${resetTime ? ` (${t("format.resets")} ${resetTime})` : ""}`,
-      colors,
-    )}`;
-  }
-
-  const threshold = display?.usageThreshold ?? 0;
-  const fiveHour = ctx.usageData!.fiveHour;
-  const sevenDay = ctx.usageData!.sevenDay;
-
-  const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
-  if (effectiveUsage < threshold) {
-    return null;
-  }
-
-  const usageBarEnabled = display?.usageBarEnabled ?? true;
-  const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
-  const barWidth = getAdaptiveBarWidth();
-
-  if (fiveHour === null && sevenDay !== null) {
-    const weeklyOnlyPart = formatUsageWindowPart({
-      label: t("label.weekly"),
-      percent: sevenDay,
-      resetAt: ctx.usageData!.sevenDayResetAt,
-      colors,
-      usageBarEnabled,
-      barWidth,
-      forceLabel: true,
-    });
-    return `${label(t("label.usage"), colors)} ${weeklyOnlyPart}`;
-  }
-
-  const fiveHourPart = formatUsageWindowPart({
-    label: "5h",
-    percent: fiveHour,
-    resetAt: ctx.usageData!.fiveHourResetAt,
-    colors,
-    usageBarEnabled,
-    barWidth,
-  });
-
-  if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
-    const sevenDayPart = formatUsageWindowPart({
-      label: t("label.weekly"),
-      percent: sevenDay,
-      resetAt: ctx.usageData!.sevenDayResetAt,
-      colors,
-      usageBarEnabled,
-      barWidth,
-      forceLabel: true,
-    });
-    return `${label(t("label.usage"), colors)} ${fiveHourPart} | ${sevenDayPart}`;
-  }
-
-  return `${label(t("label.usage"), colors)} ${fiveHourPart}`;
+function formatCompactWindowPart(
+  windowLabel: string,
+  percent: number | null,
+  resetAt: Date | null,
+  timeFormat: TimeFormatMode,
+  colors?: RenderContext["config"]["colors"],
+): string {
+  const usageDisplay = formatUsagePercent(percent, colors);
+  const reset = formatResetTime(resetAt, timeFormat);
+  const styledLabel = label(`${windowLabel}:`, colors);
+  return reset
+    ? `${styledLabel} ${usageDisplay} ${label(`(${reset})`, colors)}`
+    : `${styledLabel} ${usageDisplay}`;
 }
 
 function formatUsagePercent(
@@ -268,49 +315,50 @@ function formatUsagePercent(
 
 function formatUsageWindowPart({
   label: windowLabel,
+  labelKey,
   percent,
   resetAt,
   colors,
   usageBarEnabled,
   barWidth,
+  timeFormat = 'relative',
+  showResetLabel,
   forceLabel = false,
+  alignLabels = false,
 }: {
   label: string;
+  labelKey?: MessageKey;
   percent: number | null;
   resetAt: Date | null;
   colors?: RenderContext["config"]["colors"];
   usageBarEnabled: boolean;
   barWidth: number;
+  timeFormat?: TimeFormatMode;
+  showResetLabel: boolean;
   forceLabel?: boolean;
+  alignLabels?: boolean;
 }): string {
   const usageDisplay = formatUsagePercent(percent, colors);
-  const reset = formatResetTime(resetAt);
-  const styledLabel = label(windowLabel, colors);
+  const reset = formatResetTime(resetAt, timeFormat);
+  const styledLabel = labelKey
+    ? progressLabel(labelKey, colors, alignLabels)
+    : label(windowLabel, colors);
+  const resetsKey = timeFormat === 'absolute' ? "format.resets" : "format.resetsIn";
 
-  const body = reset
-    ? `${usageDisplay} (${t("format.resetsIn")} ${reset})`
-    : `${usageDisplay}`;
-  return forceLabel ? `${styledLabel} ${body}` : body;
-}
+  const resetSuffix = reset
+    ? showResetLabel
+      ? `(${t(resetsKey)} ${reset})`
+      : `(${reset})`
+    : "";
 
-function formatResetTime(resetAt: Date | null): string {
-  if (!resetAt) return "";
-  const now = new Date();
-  const diffMs = resetAt.getTime() - now.getTime();
-  if (diffMs <= 0) return "";
-
-  const diffMins = Math.ceil(diffMs / 60000);
-  if (diffMins < 60) return `${diffMins}m`;
-
-  const hours = Math.floor(diffMins / 60);
-  const mins = diffMins % 60;
-
-  if (hours >= 24) {
-    const days = Math.floor(hours / 24);
-    const remHours = hours % 24;
-    if (remHours > 0) return `${days}d ${remHours}h`;
-    return `${days}d`;
+  if (usageBarEnabled) {
+    const body = resetSuffix
+      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} ${resetSuffix}`
+      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+    return forceLabel ? `${styledLabel} ${body}` : body;
   }
 
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  return resetSuffix
+    ? `${styledLabel} ${usageDisplay} ${resetSuffix}`
+    : `${styledLabel} ${usageDisplay}`;
 }

@@ -3,59 +3,11 @@ import * as path from 'node:path';
 import { getModelName, formatModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
 import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor } from '../colors.js';
-import { getAdaptiveBarWidth } from '../../utils/terminal.js';
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
 import { getDetectedProviderName } from '../../provider-usage.js';
-function formatResetTime(resetAt) {
-    if (!resetAt)
-        return '';
-    const now = new Date();
-    const diffMs = resetAt.getTime() - now.getTime();
-    if (diffMs <= 0)
-        return '';
-    const diffMins = Math.ceil(diffMs / 60000);
-    if (diffMins < 60)
-        return `${diffMins}m`;
-    const hours = Math.floor(diffMins / 60);
-    const mins = diffMins % 60;
-    if (hours >= 24) {
-        const days = Math.floor(hours / 24);
-        const remHours = hours % 24;
-        if (remHours > 0)
-            return `${days}d ${remHours}h`;
-        return `${days}d`;
-    }
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-}
-function formatUsageValue(used, limit, percent) {
-    if (typeof used === 'number' && typeof limit === 'number') {
-        return `${used}/${limit}`;
-    }
-    if (typeof percent === 'number') {
-        return `${percent}%`;
-    }
-    return '--';
-}
-function formatResetTimePrecise(resetAt) {
-    if (!resetAt)
-        return '';
-    const now = new Date();
-    const diffMs = resetAt.getTime() - now.getTime();
-    if (diffMs <= 0)
-        return '';
-    const diffMins = Math.ceil(diffMs / 60000);
-    if (diffMins < 60)
-        return `${diffMins}m`;
-    const hours = Math.floor(diffMins / 60);
-    const mins = diffMins % 60;
-    if (hours >= 24) {
-        const days = Math.floor(hours / 24);
-        const remHours = hours % 24;
-        return `${days}d${remHours}h`;
-    }
-    return `${hours}h${mins}m`;
-}
+import { formatResetTime } from '../format-reset-time.js';
+import { formatUsageValue } from '../format-usage-value.js';
 function formatCompactProvider(provider) {
     if (!provider)
         return '';
@@ -94,7 +46,7 @@ export function renderProjectLine(ctx, terminalWidth = null) {
         const providerLabel = getProviderLabel(ctx.stdin) ?? getDetectedProviderName() ?? undefined;
         const usageMode = display?.usageDisplayMode ?? 'compact';
         let modelDisplay;
-        if (usageMode === 'compact' && providerLabel) {
+        if (usageMode === 'compact' && providerLabel && ctx.usageData) {
             const compactProvider = formatCompactProvider(providerLabel);
             const compactModel = formatCompactModelName(model);
             modelDisplay = modelColor(`${compactProvider}:${compactModel}`, colors);
@@ -110,8 +62,9 @@ export function renderProjectLine(ctx, terminalWidth = null) {
             if (usageMode === 'basic') {
                 const weekVal = formatUsageValue(ctx.usageData.sevenDayUsed, ctx.usageData.sevenDayLimit, ctx.usageData.sevenDay);
                 const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, ctx.usageData.fiveHour);
-                const weekReset = formatResetTime(ctx.usageData.sevenDayResetAt ?? null);
-                const fiveHourReset = formatResetTime(ctx.usageData.fiveHourResetAt ?? null);
+                const timeFormat = display?.timeFormat ?? 'relative';
+                const weekReset = formatResetTime(ctx.usageData.sevenDayResetAt ?? null, timeFormat);
+                const fiveHourReset = formatResetTime(ctx.usageData.fiveHourResetAt ?? null, timeFormat);
                 const weekPart = weekVal !== '--' ? label(`[${weekVal}${weekReset ? `(${weekReset})` : ''}]`, colors) : '';
                 const fiveHourPart = fiveHourVal !== '--' ? label(`[${fiveHourVal}${fiveHourReset ? `(${fiveHourReset})` : ''}]`, colors) : '';
                 if (weekPart || fiveHourPart) {
@@ -119,24 +72,31 @@ export function renderProjectLine(ctx, terminalWidth = null) {
                 }
             }
             else if (usageMode === 'compact') {
-                const barWidth = getAdaptiveBarWidth();
-                const weekVal = formatUsageValue(ctx.usageData.sevenDayUsed, ctx.usageData.sevenDayLimit, ctx.usageData.sevenDay);
-                const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, ctx.usageData.fiveHour);
-                const weekReset = formatResetTimePrecise(ctx.usageData.sevenDayResetAt ?? null);
-                const fiveHourReset = formatResetTimePrecise(ctx.usageData.fiveHourResetAt ?? null);
-                // On narrow terminals skip reset times to keep the line compact
-                const showReset = terminalWidth === null || terminalWidth >= 100;
-                const usageParts = [];
-                if (ctx.usageData.sevenDay !== null) {
-                    const part = `W: ${weekVal}`;
-                    usageParts.push(showReset && weekReset ? `${part} (${weekReset})` : part);
-                }
-                if (ctx.usageData.fiveHour !== null) {
-                    const part = `5H: ${fiveHourVal}`;
-                    usageParts.push(showReset && fiveHourReset ? `${part} (${fiveHourReset})` : part);
-                }
-                if (usageParts.length > 0) {
-                    usagePart = usageParts.join(' ');
+                const threshold = display?.usageThreshold ?? 0;
+                const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
+                const fiveHour = ctx.usageData.fiveHour;
+                const sevenDay = ctx.usageData.sevenDay;
+                const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
+                if (effectiveUsage >= threshold) {
+                    const timeFormat = display?.timeFormat ?? 'relative';
+                    const weekReset = formatResetTime(ctx.usageData.sevenDayResetAt ?? null, timeFormat);
+                    const fiveHourReset = formatResetTime(ctx.usageData.fiveHourResetAt ?? null, timeFormat);
+                    // On narrow terminals skip reset times to keep the line compact
+                    const showReset = terminalWidth === null || terminalWidth >= 100;
+                    const usageParts = [];
+                    if (fiveHour !== null) {
+                        const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, fiveHour);
+                        const part = `5H: ${fiveHourVal}`;
+                        usageParts.push(showReset && fiveHourReset ? `${part} (${fiveHourReset})` : part);
+                    }
+                    if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
+                        const weekVal = formatUsageValue(ctx.usageData.sevenDayUsed, ctx.usageData.sevenDayLimit, sevenDay);
+                        const part = `W: ${weekVal}`;
+                        usageParts.push(showReset && weekReset ? `${part} (${weekReset})` : part);
+                    }
+                    if (usageParts.length > 0) {
+                        usagePart = usageParts.join(' ');
+                    }
                 }
             }
         }
@@ -156,6 +116,7 @@ export function renderProjectLine(ctx, terminalWidth = null) {
     let gitPart = '';
     const gitConfig = ctx.config?.gitStatus;
     const showGit = gitConfig?.enabled ?? true;
+    const branchOverflow = gitConfig?.branchOverflow ?? 'truncate';
     if (showGit && ctx.gitStatus) {
         const branchText = ctx.gitStatus.branch + ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty ? '*' : '');
         const coloredBranch = gitBranchColor(branchText, colors);
@@ -182,7 +143,13 @@ export function renderProjectLine(ctx, terminalWidth = null) {
         gitPart = `${gitColor('git:(', colors)}${gitInner.join(' ')}${gitColor(')', colors)}`;
     }
     if (projectPart && gitPart) {
-        metaParts.push(`${projectPart} ${gitPart}`);
+        if (branchOverflow === 'wrap') {
+            metaParts.push(projectPart);
+            metaParts.push(gitPart);
+        }
+        else {
+            metaParts.push(`${projectPart} ${gitPart}`);
+        }
     }
     else if (projectPart) {
         metaParts.push(projectPart);

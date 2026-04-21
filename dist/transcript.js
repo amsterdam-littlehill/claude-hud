@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as readline from 'readline';
 import { createHash } from 'node:crypto';
 import { getHudPluginDir } from './claude-config-dir.js';
+const TRANSCRIPT_CACHE_VERSION = 2;
 let createReadStreamImpl = fs.createReadStream;
 function normalizeTokenCount(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -57,6 +58,7 @@ function serializeTranscriptData(data) {
         todos: data.todos.map((todo) => ({ ...todo })),
         sessionStart: data.sessionStart?.toISOString(),
         sessionName: data.sessionName,
+        lastAssistantResponseAt: data.lastAssistantResponseAt?.toISOString(),
         sessionTokens: data.sessionTokens,
     };
 }
@@ -75,6 +77,7 @@ function deserializeTranscriptData(data) {
         todos: data.todos.map((todo) => ({ ...todo })),
         sessionStart: data.sessionStart ? new Date(data.sessionStart) : undefined,
         sessionName: data.sessionName,
+        lastAssistantResponseAt: data.lastAssistantResponseAt ? new Date(data.lastAssistantResponseAt) : undefined,
         sessionTokens: normalizeSessionTokens(data.sessionTokens),
     };
 }
@@ -83,7 +86,10 @@ function readTranscriptCache(transcriptPath, state) {
         const cachePath = getTranscriptCachePath(transcriptPath, os.homedir());
         const raw = fs.readFileSync(cachePath, 'utf8');
         const parsed = JSON.parse(raw);
-        if (parsed.transcriptPath !== path.resolve(transcriptPath)
+        if (parsed.version !== TRANSCRIPT_CACHE_VERSION
+            || !parsed.data
+            || !parsed.transcriptPath
+            || parsed.transcriptPath !== path.resolve(transcriptPath)
             || parsed.transcriptState?.mtimeMs !== state.mtimeMs
             || parsed.transcriptState?.size !== state.size) {
             return null;
@@ -99,6 +105,7 @@ function writeTranscriptCache(transcriptPath, state, data) {
         const cachePath = getTranscriptCachePath(transcriptPath, os.homedir());
         fs.mkdirSync(path.dirname(cachePath), { recursive: true });
         const payload = {
+            version: TRANSCRIPT_CACHE_VERSION,
             transcriptPath: path.resolve(transcriptPath),
             transcriptState: state,
             data: serializeTranscriptData(data),
@@ -190,8 +197,12 @@ export function _setCreateReadStreamForTests(impl) {
 }
 function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result) {
     const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
-    if (!result.sessionStart && entry.timestamp) {
+    const hasValidTimestamp = !Number.isNaN(timestamp.getTime());
+    if (!result.sessionStart && entry.timestamp && hasValidTimestamp) {
         result.sessionStart = timestamp;
+    }
+    if (entry.type === 'assistant' && entry.timestamp && hasValidTimestamp) {
+        result.lastAssistantResponseAt = timestamp;
     }
     const content = entry.message?.content;
     if (!content || !Array.isArray(content))
@@ -209,7 +220,7 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
                 const input = block.input;
                 const agentEntry = {
                     id: block.id,
-                    type: input?.subagent_type ?? 'unknown',
+                    type: input?.subagent_type ?? 'agent',
                     model: input?.model ?? undefined,
                     description: input?.description ?? undefined,
                     status: 'running',

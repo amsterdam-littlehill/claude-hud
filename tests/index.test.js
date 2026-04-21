@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { setLanguage } from "../dist/i18n/index.js";
 import { formatSessionDuration, main } from "../dist/index.js";
 
@@ -101,7 +102,7 @@ test("index entrypoint runs when executed directly", async () => {
     process.env.LANG = "C";
     setLanguage("en");
     const moduleUrl = new URL("../dist/index.js", import.meta.url);
-    process.argv[1] = new URL(moduleUrl).pathname;
+    process.argv[1] = fileURLToPath(moduleUrl);
     Object.defineProperty(process.stdin, "isTTY", {
       value: true,
       configurable: true,
@@ -315,6 +316,7 @@ test("main leaves usageData null when stdin rate_limits are absent", async () =>
       hooksCount: 0,
     }),
     getGitStatus: async () => null,
+    fetchProviderUsage: async () => null,
     render: (ctx) => {
       renderedContext = ctx;
     },

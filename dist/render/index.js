@@ -1,11 +1,13 @@
-import { DEFAULT_ELEMENT_ORDER } from '../config.js';
+import { DEFAULT_ELEMENT_ORDER, DEFAULT_MERGE_GROUPS } from '../config.js';
 import { renderSessionLine } from './session-line.js';
 import { renderToolsLine } from './tools-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
+import { renderStatsLine } from './lines/index.js';
 import { renderBuddyColumn } from './lines/buddy.js';
-import { renderIdentityLine, renderProjectLine, renderGitFilesLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, renderStatsLine, } from './lines/index.js';
+import { renderIdentityLine, renderProjectLine, renderGitFilesLine, renderEnvironmentLine, renderPromptCacheLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
+import { getTerminalWidth, UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
 // eslint-disable-next-line no-control-regex
@@ -15,23 +17,6 @@ const GRAPHEME_SEGMENTER = typeof Intl.Segmenter === 'function'
     : null;
 function stripAnsi(str) {
     return str.replace(ANSI_ESCAPE_GLOBAL, '');
-}
-function getTerminalWidth() {
-    const stdoutColumns = process.stdout?.columns;
-    if (typeof stdoutColumns === 'number' && Number.isFinite(stdoutColumns) && stdoutColumns > 0) {
-        return Math.floor(stdoutColumns);
-    }
-    // When running as a statusline subprocess, stdout is piped but stderr is
-    // still connected to the real terminal — use it to get the actual width.
-    const stderrColumns = process.stderr?.columns;
-    if (typeof stderrColumns === 'number' && Number.isFinite(stderrColumns) && stderrColumns > 0) {
-        return Math.floor(stderrColumns);
-    }
-    const envColumns = Number.parseInt(process.env.COLUMNS ?? '', 10);
-    if (Number.isFinite(envColumns) && envColumns > 0) {
-        return envColumns;
-    }
-    return null;
 }
 function splitAnsiTokens(str) {
     const tokens = [];
@@ -254,6 +239,29 @@ function makeSeparator(length) {
     return dim('─'.repeat(Math.max(length, 1)));
 }
 const ACTIVITY_ELEMENTS = new Set(['tools', 'agents', 'todos']);
+function buildMergeGroupLookup(mergeGroups) {
+    const lookup = new Map();
+    for (const group of mergeGroups) {
+        const groupSet = new Set(group);
+        for (const element of group) {
+            if (!lookup.has(element)) {
+                lookup.set(element, groupSet);
+            }
+        }
+    }
+    return lookup;
+}
+function collectMergeSequence(elementOrder, startIndex, seen, group) {
+    const sequence = [];
+    for (let index = startIndex; index < elementOrder.length; index += 1) {
+        const element = elementOrder[index];
+        if (seen.has(element) || !group.has(element)) {
+            break;
+        }
+        sequence.push(element);
+    }
+    return sequence;
+}
 function collectActivityLines(ctx) {
     const activityLines = [];
     const display = ctx.config?.display;
@@ -277,27 +285,31 @@ function collectActivityLines(ctx) {
     }
     return activityLines;
 }
-function renderElementLine(ctx, element, terminalWidth = null) {
+function renderElementLine(ctx, element, options) {
     const display = ctx.config?.display;
+    const alignProgressLabels = options?.alignProgressLabels ?? false;
+    const terminalWidth = options?.terminalWidth ?? null;
     switch (element) {
         case 'project':
             return renderProjectLine(ctx, terminalWidth);
         case 'context':
             return renderIdentityLine(ctx);
         case 'usage':
-            return renderUsageLine(ctx);
+            return renderUsageLine(ctx, alignProgressLabels);
+        case 'promptCache':
+            return renderPromptCacheLine(ctx);
         case 'memory':
             return renderMemoryLine(ctx);
         case 'environment':
             return renderEnvironmentLine(ctx);
-        case 'stats':
-            return display?.showStats === false ? null : renderStatsLine(ctx);
         case 'tools':
             return display?.showTools === false ? null : renderToolsLine(ctx);
         case 'agents':
             return display?.showAgents === false ? null : renderAgentsLine(ctx);
         case 'todos':
             return display?.showTodos === false ? null : renderTodosLine(ctx);
+        case 'stats':
+            return display?.showStats === false ? null : renderStatsLine(ctx);
     }
 }
 function renderCompact(ctx) {
@@ -310,6 +322,8 @@ function renderCompact(ctx) {
 }
 function renderExpanded(ctx, terminalWidth = null) {
     const elementOrder = ctx.config?.elementOrder ?? DEFAULT_ELEMENT_ORDER;
+    const mergeGroups = ctx.config?.display?.mergeGroups ?? DEFAULT_MERGE_GROUPS;
+    const mergeGroupLookup = buildMergeGroupLookup(mergeGroups);
     const seen = new Set();
     const lines = [];
     for (let index = 0; index < elementOrder.length; index += 1) {
@@ -317,35 +331,55 @@ function renderExpanded(ctx, terminalWidth = null) {
         if (seen.has(element)) {
             continue;
         }
-        const nextElement = elementOrder[index + 1];
-        if ((element === 'context' && nextElement === 'usage' && !seen.has('usage'))
-            || (element === 'usage' && nextElement === 'context' && !seen.has('context'))) {
-            seen.add(element);
-            seen.add(nextElement);
-            const firstLine = renderElementLine(ctx, element, terminalWidth);
-            const secondLine = renderElementLine(ctx, nextElement, terminalWidth);
-            if (firstLine && secondLine) {
-                const hasMultiline = firstLine.includes('\n') || secondLine.includes('\n');
-                const combinedLine = `${firstLine} │ ${secondLine}`;
-                const canCombine = !hasMultiline && (!terminalWidth || visualLength(combinedLine) <= terminalWidth);
-                if (canCombine) {
-                    lines.push({ line: combinedLine, isActivity: false });
+        const mergeGroup = mergeGroupLookup.get(element);
+        if (mergeGroup) {
+            const mergeSequence = collectMergeSequence(elementOrder, index, seen, mergeGroup);
+            if (mergeSequence.length > 1) {
+                index += mergeSequence.length - 1;
+                for (const groupedElement of mergeSequence) {
+                    seen.add(groupedElement);
                 }
-                else {
-                    lines.push({ line: firstLine, isActivity: false });
-                    lines.push({ line: secondLine, isActivity: false });
+                const renderedGroupLines = mergeSequence
+                    .map(groupedElement => ({
+                    element: groupedElement,
+                    line: renderElementLine(ctx, groupedElement, { terminalWidth }),
+                }))
+                    .filter((entry) => typeof entry.line === 'string' && entry.line.length > 0);
+                if (renderedGroupLines.length > 1) {
+                    const combinedLine = renderedGroupLines.map(({ line }) => line).join(' │ ');
+                    const widthIsReal = terminalWidth && terminalWidth !== UNKNOWN_TERMINAL_WIDTH;
+                    const canCombine = !widthIsReal || visualLength(combinedLine) <= terminalWidth;
+                    if (canCombine) {
+                        lines.push({
+                            line: combinedLine,
+                            isActivity: renderedGroupLines.some(({ element: groupedElement }) => ACTIVITY_ELEMENTS.has(groupedElement)),
+                        });
+                    }
+                    else {
+                        for (const { element: groupedElement, line } of renderedGroupLines) {
+                            const stackedLine = renderElementLine(ctx, groupedElement, {
+                                alignProgressLabels: true,
+                                terminalWidth,
+                            }) ?? line;
+                            lines.push({
+                                line: stackedLine,
+                                isActivity: ACTIVITY_ELEMENTS.has(groupedElement),
+                            });
+                        }
+                    }
                 }
+                else if (renderedGroupLines.length === 1) {
+                    const [{ element: groupedElement, line }] = renderedGroupLines;
+                    lines.push({
+                        line,
+                        isActivity: ACTIVITY_ELEMENTS.has(groupedElement),
+                    });
+                }
+                continue;
             }
-            else if (firstLine) {
-                lines.push({ line: firstLine, isActivity: false });
-            }
-            else if (secondLine) {
-                lines.push({ line: secondLine, isActivity: false });
-            }
-            continue;
         }
         seen.add(element);
-        const line = renderElementLine(ctx, element, terminalWidth);
+        const line = renderElementLine(ctx, element, { terminalWidth });
         if (!line) {
             continue;
         }
@@ -364,10 +398,14 @@ function renderExpanded(ctx, terminalWidth = null) {
 export function render(ctx) {
     const lineLayout = ctx.config?.lineLayout ?? 'expanded';
     const showSeparators = ctx.config?.showSeparators ?? false;
-    const terminalWidth = getTerminalWidth();
+    const detectedWidth = getTerminalWidth({ fallback: UNKNOWN_TERMINAL_WIDTH }) ??
+        UNKNOWN_TERMINAL_WIDTH;
+    const terminalWidth = detectedWidth === UNKNOWN_TERMINAL_WIDTH && ctx.config?.maxWidth
+        ? ctx.config.maxWidth
+        : detectedWidth;
     // Buddy column: adaptive detail level based on available space.
-    // Tries full → compact → mini, giving up if even mini won't fit.
-    const showBuddy = ctx.config?.display?.showBuddy !== false;
+    // Tries full -> compact -> mini, giving up if even mini won't fit.
+    const showBuddy = ctx.config?.display?.showBuddy === true;
     let buddyColumn = null;
     let buddyWidth = 0;
     const buddyPadding = 1;
@@ -379,7 +417,7 @@ export function render(ctx) {
             if (!col)
                 continue;
             const needed = col.width + buddyPadding + STATUS_MIN_WIDTH;
-            // Unknown width → show the highest level; known width → must fit.
+            // Unknown width -> show the highest level; known width -> must fit.
             if (terminalWidth === null || terminalWidth >= needed) {
                 buddyColumn = col;
                 buddyWidth = col.width;
@@ -427,9 +465,8 @@ export function render(ctx) {
         lines.push(...activityLines);
     }
     const physicalLines = lines.flatMap(line => line.split('\n'));
-    const visibleLines = statusWidth !== null
-        ? physicalLines.flatMap(line => wrapLineToWidth(line, statusWidth))
-        : physicalLines;
+    const wrapWidth = statusWidth ? statusWidth : 0;
+    const visibleLines = physicalLines.flatMap(line => wrapLineToWidth(line, wrapWidth));
     // Fastfetch-style side-by-side: buddy only on lines where it has content
     const buddyLines = buddyColumn?.lines ?? [];
     const maxLines = Math.max(visibleLines.length, buddyLines.length);

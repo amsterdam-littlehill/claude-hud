@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { UsageData } from './types.js';
+import { getClaudeConfigDir } from './claude-config-dir.js';
 
 // ─── Provider Interface ────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ export interface ProviderWindow {
 
 // ─── Cache Configuration ───────────────────────────────────────────────────────
 
-const CACHE_TTL_MS = 60_000;        // 1 minute — fresh cache lifetime
+const CACHE_TTL_MS = 10_000;        // 10s — fresh cache lifetime
 const NEGATIVE_CACHE_TTL_MS = 30_000; // 30s — suppress retries after errors
 const STALE_CACHE_MAX_AGE_MS = 3_600_000; // 1 hour — stale cache fallback
 const LOCK_TIMEOUT_MS = 300;        // 300ms — match statusline refresh interval
@@ -209,12 +210,16 @@ function formatWindowLabel(duration: number, timeUnit: string): string {
   if (timeUnit === 'TIME_UNIT_MINUTE') {
     if (duration >= 60 && duration % 60 === 0) {
       const hours = duration / 60;
-      return hours === 24 ? '1d' : `${hours}h`;
+      if (hours === 24) return '1d';
+      if (hours === 168) return '7d';
+      return `${hours}h`;
     }
     return `${duration}m`;
   }
   if (timeUnit === 'TIME_UNIT_HOUR') {
-    return duration === 24 ? '1d' : `${duration}h`;
+    if (duration === 24) return '1d';
+    if (duration === 168) return '7d';
+    return `${duration}h`;
   }
   if (timeUnit === 'TIME_UNIT_DAY') {
     return `${duration}d`;
@@ -530,7 +535,8 @@ interface DetectedProvider {
 }
 
 function detectProviderFromSettings(): DetectedProvider | null {
-  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  const claudeDir = getClaudeConfigDir(os.homedir());
+  const settingsPath = path.join(claudeDir, 'settings.json');
   if (!fs.existsSync(settingsPath)) return null;
 
   try {
@@ -612,12 +618,6 @@ export async function fetchProviderUsage(): Promise<UsageData | null> {
     return mapToUsageData(cached.data);
   }
 
-  // Stale cache: return it now, refresh in background
-  if (cacheStatus.stale && cached?.data) {
-    refreshInBackground(provider, detected.apiKey, detected.baseUrl);
-    return mapToUsageData(cached.data);
-  }
-
   // Step 2: Acquire exclusive lock
   const lockAcquired = acquireLock(lockPath, LOCK_TIMEOUT_MS);
   if (!lockAcquired) {
@@ -661,29 +661,6 @@ export async function fetchProviderUsage(): Promise<UsageData | null> {
   } finally {
     releaseLock(lockPath);
   }
-}
-
-function refreshInBackground(
-  provider: CodingPlanProvider,
-  apiKey: string,
-  baseUrl: string,
-): void {
-  const detected = detectProviderFromSettings();
-  if (!detected) return;
-
-  const lockPath = getLockPath(detected.name);
-  const lockAcquired = acquireLock(lockPath, 0);
-  if (!lockAcquired) return;
-
-  provider.fetchUsage(apiKey, baseUrl)
-    .then((data) => writeCache(provider.name, data))
-    .catch((e) => {
-      const err = e instanceof Error ? e.message : String(e);
-      writeCache(provider.name, null, err);
-    })
-    .finally(() => {
-      releaseLock(lockPath);
-    });
 }
 
 function mapToUsageData(data: ProviderUsageData): UsageData | null {
@@ -741,7 +718,18 @@ function mapToUsageData(data: ProviderUsageData): UsageData | null {
   };
 }
 
+let _detectedProviderNameCache: string | null | undefined = undefined;
+
 export function getDetectedProviderName(): string | null {
+  if (_detectedProviderNameCache !== undefined) {
+    return _detectedProviderNameCache;
+  }
   const detected = detectProviderFromSettings();
-  return detected?.name ?? null;
+  _detectedProviderNameCache = detected?.name ?? null;
+  return _detectedProviderNameCache;
+}
+
+/** Test-only entrypoint to invalidate the provider name cache. */
+export function _invalidateProviderNameCache(): void {
+  _detectedProviderNameCache = undefined;
 }

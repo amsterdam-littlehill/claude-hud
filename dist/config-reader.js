@@ -249,7 +249,7 @@ function computeConfigCountsFresh(cwd) {
     let rulesCount = 0;
     let hooksCount = 0;
     let outputStyle;
-    const homeDir = os.homedir();
+    const homeDir = process.env.HOME || os.homedir();
     const claudeDir = getClaudeConfigDir(homeDir);
     // Collect all MCP servers across scopes, then subtract disabled ones
     const userMcpServers = new Set();
@@ -344,7 +344,7 @@ function computeConfigCountsFresh(cwd) {
     return { claudeMdCount, rulesCount, mcpCount, hooksCount, outputStyle };
 }
 export async function countConfigs(cwd) {
-    const homeDir = os.homedir();
+    const homeDir = process.env.HOME || os.homedir();
     const claudeDir = getClaudeConfigDir(homeDir);
     const claudeConfigJsonPath = getClaudeConfigJsonPath(homeDir);
     const normalizedCwd = cwd ? path.resolve(cwd) : null;

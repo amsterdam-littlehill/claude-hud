@@ -24,6 +24,7 @@ export interface StdinData {
   };
   context_window?: {
     context_window_size?: number;
+    total_input_tokens?: number | null;
     current_usage?: {
       input_tokens?: number;
       output_tokens?: number;
@@ -51,6 +52,8 @@ export interface StdinData {
       resets_at?: number | null;
     } | null;
   } | null;
+  // Future: Claude Code may expose effort level directly in stdin JSON
+  effort?: string | null;
   buddy?: BuddyStdinData;
 }
 
@@ -115,6 +118,7 @@ export interface TranscriptData {
   todos: TodoItem[];
   sessionStart?: Date;
   sessionName?: string;
+  lastAssistantResponseAt?: Date;
   sessionTokens?: SessionTokenUsage;
 }
 
@@ -133,4 +137,6 @@ export interface RenderContext {
   extraLabel: string | null;
   outputStyle?: string;
   claudeCodeVersion?: string;
+  effortLevel?: string;
+  effortSymbol?: string;
 }

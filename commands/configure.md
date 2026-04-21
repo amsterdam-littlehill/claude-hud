@@ -308,8 +308,8 @@ Changes:
 
 2. **Preview of HUD (Expanded layout):**
 ```
-[Opus | Pro] │ my-project git:(main*)
-Context ████░░░░░ 45% │ Usage ██░░░░░░░░ 25% (1h 30m / 5h)
+[Opus | Pro] | my-project git:(main*)
+Context ████░░░░░ 45% | Usage ██░░░░░░░░ 25% (1h 30m / 5h)
 ◐ Edit: file.ts | ✓ Read ×3
 ▸ Fix auth bug (2/5)
 ```

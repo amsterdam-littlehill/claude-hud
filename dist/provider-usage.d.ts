@@ -61,4 +61,6 @@ export interface ProviderWindow {
  */
 export declare function fetchProviderUsage(): Promise<UsageData | null>;
 export declare function getDetectedProviderName(): string | null;
+/** Test-only entrypoint to invalidate the provider name cache. */
+export declare function _invalidateProviderNameCache(): void;
 //# sourceMappingURL=provider-usage.d.ts.map

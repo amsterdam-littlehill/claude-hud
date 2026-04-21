@@ -82,7 +82,12 @@ export async function runExtraCmd(cmd: string, timeout: number = TIMEOUT_MS): Pr
       timeout,
       maxBuffer: MAX_BUFFER,
     });
-    const data: unknown = JSON.parse(stdout.trim());
+    let cleaned = stdout.trim();
+    // Windows cmd preserves surrounding quotes on echo; strip them before JSON parse
+    if ((cleaned.startsWith("'") && cleaned.endsWith("'")) || (cleaned.startsWith('"') && cleaned.endsWith('"'))) {
+      cleaned = cleaned.slice(1, -1);
+    }
+    const data: unknown = JSON.parse(cleaned);
     if (
       typeof data === 'object' &&
       data !== null &&

@@ -2,6 +2,7 @@ import type { Language } from './i18n/types.js';
 export type LineLayoutType = 'compact' | 'expanded';
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
+export type GitBranchOverflowMode = 'truncate' | 'wrap';
 export type UsageDisplayMode = 'basic' | 'compact' | 'table' | 'badge';
 /**
  * Controls how the model name is displayed in the HUD badge.
@@ -11,7 +12,8 @@ export type UsageDisplayMode = 'basic' | 'compact' | 'table' | 'badge';
  *   short:   Strip context suffix AND "Claude " prefix (e.g. "Opus 4.6")
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
-export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'stats' | 'tools' | 'agents' | 'todos';
+export type TimeFormatMode = 'relative' | 'absolute' | 'both';
+export type HudElement = 'project' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'stats' | 'tools' | 'agents' | 'todos';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
 export type HudColorValue = HudColorName | number | string;
@@ -29,17 +31,20 @@ export interface HudColorOverrides {
     custom: HudColorValue;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
+export declare const DEFAULT_MERGE_GROUPS: HudElement[][];
 export interface HudConfig {
     language: Language;
     lineLayout: LineLayoutType;
     showSeparators: boolean;
     pathLevels: 1 | 2 | 3;
+    maxWidth: number | null;
     elementOrder: HudElement[];
     gitStatus: {
         enabled: boolean;
         showDirty: boolean;
         showAheadBehind: boolean;
         showFileStats: boolean;
+        branchOverflow: GitBranchOverflowMode;
         pushWarningThreshold: number;
         pushCriticalThreshold: number;
     };
@@ -55,16 +60,22 @@ export interface HudConfig {
         showTokenBreakdown: boolean;
         showUsage: boolean;
         usageBarEnabled: boolean;
+        showResetLabel: boolean;
+        usageCompact: boolean;
         showTools: boolean;
         showAgents: boolean;
         showTodos: boolean;
-        showBuddy: boolean;
         showSessionName: boolean;
         showClaudeCodeVersion: boolean;
+        showEffortLevel: boolean;
         showMemoryUsage: boolean;
+        showPromptCache: boolean;
+        promptCacheTtlSeconds: number;
         showSessionTokens: boolean;
         showOutputStyle: boolean;
+        showBuddy: boolean;
         showStats: boolean;
+        mergeGroups: HudElement[][];
         autocompactBuffer: AutocompactBufferMode;
         usageThreshold: number;
         sevenDayThreshold: number;
@@ -72,6 +83,7 @@ export interface HudConfig {
         modelFormat: ModelFormatMode;
         modelOverride: string;
         customLine: string;
+        timeFormat: TimeFormatMode;
         usageDisplayMode: UsageDisplayMode;
     };
     colors: HudColorOverrides;

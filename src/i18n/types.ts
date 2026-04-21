@@ -4,6 +4,7 @@ export type MessageKey =
   | "label.usage"
   | "label.weekly"
   | "label.approxRam"
+  | "label.promptCache"
   | "label.rules"
   | "label.hooks"
   | "label.estimatedCost"
@@ -16,9 +17,11 @@ export type MessageKey =
   // Status
   | "status.limitReached"
   | "status.allTodosComplete"
+  | "status.expired"
   // Format
   | "format.resets"
   | "format.resetsIn"
+  | "format.at"
   | "format.in"
   | "format.cache"
   | "format.out"

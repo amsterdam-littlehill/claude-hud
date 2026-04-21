@@ -7,8 +7,10 @@ import { loadConfig } from "./config.js";
 import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
-import { setLanguage, t } from "./i18n/index.js";
+import { resolveEffortLevel } from "./effort.js";
+import { applyContextWindowFallback } from "./context-cache.js";
 import { fetchProviderUsage } from "./provider-usage.js";
+import { setLanguage, t } from "./i18n/index.js";
 import type { RenderContext } from "./types.js";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
@@ -24,6 +26,8 @@ export type MainDeps = {
   runExtraCmd: typeof runExtraCmd;
   getClaudeCodeVersion: typeof getClaudeCodeVersion;
   getMemoryUsage: typeof getMemoryUsage;
+  applyContextWindowFallback: typeof applyContextWindowFallback;
+  fetchProviderUsage: typeof fetchProviderUsage;
   render: typeof render;
   now: () => number;
   log: (...args: unknown[]) => void;
@@ -41,6 +45,8 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     runExtraCmd,
     getClaudeCodeVersion,
     getMemoryUsage,
+    applyContextWindowFallback,
+    fetchProviderUsage,
     render,
     now: () => Date.now(),
     log: console.log,
@@ -48,16 +54,12 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
   };
 
   try {
-    // Phase 1: load config + read stdin in parallel (independent I/O)
-    const [config, stdin] = await Promise.all([
-      deps.loadConfig(),
-      deps.readStdin(),
-    ]);
-
-    setLanguage(config.language);
+    const stdin = await deps.readStdin();
 
     if (!stdin) {
       // Running without stdin - this happens during setup verification
+      const config = await deps.loadConfig();
+      setLanguage(config.language);
       const isMacOS = process.platform === "darwin";
       deps.log(t("init.initializing"));
       if (isMacOS) {
@@ -67,54 +69,49 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     }
 
     const transcriptPath = stdin.transcript_path ?? "";
+    const transcript = await deps.parseTranscript(transcriptPath);
 
-    // Phase 2: all independent data sources fetched in parallel
-    const providerUsagePromise = (async (): Promise<RenderContext["usageData"]> => {
-      if (config.display.showUsage === false) return null;
-      const fromStdin = deps.getUsageFromStdin(stdin);
-      if (fromStdin) return fromStdin;
-      try {
-        return await fetchProviderUsage();
-      } catch {
-        return null;
+    deps.applyContextWindowFallback(stdin, {}, transcript.sessionName);
+
+    const { claudeMdCount, rulesCount, mcpCount, hooksCount, outputStyle } =
+      await deps.countConfigs(stdin.cwd);
+
+    const config = await deps.loadConfig();
+    setLanguage(config.language);
+    const gitStatus = config.gitStatus.enabled
+      ? await deps.getGitStatus(stdin.cwd)
+      : null;
+
+    // Usage from stdin rate_limits, with provider API fallback
+    let usageData: RenderContext["usageData"] = null;
+    if (config.display.showUsage !== false) {
+      usageData = deps.getUsageFromStdin(stdin);
+      if (!usageData) {
+        try {
+          usageData = await deps.fetchProviderUsage();
+        } catch {
+          // ignore
+        }
       }
-    })();
+    }
 
     const extraCmd = deps.parseExtraCmdArg();
-    const extraLabelPromise = extraCmd
-      ? deps.runExtraCmd(extraCmd)
-      : Promise.resolve(null);
-
-    const [
-      transcript,
-      configCounts,
-      gitStatus,
-      usageData,
-      claudeCodeVersion,
-      memoryUsage,
-      extraLabel,
-    ] = await Promise.all([
-      deps.parseTranscript(transcriptPath),
-      deps.countConfigs(stdin.cwd),
-      config.gitStatus.enabled
-        ? deps.getGitStatus(stdin.cwd)
-        : Promise.resolve(null),
-      providerUsagePromise,
-      config.display.showClaudeCodeVersion
-        ? deps.getClaudeCodeVersion()
-        : Promise.resolve(undefined),
-      config.display.showMemoryUsage && config.lineLayout === "expanded"
-        ? deps.getMemoryUsage()
-        : Promise.resolve(null),
-      extraLabelPromise,
-    ]);
-
-    const { claudeMdCount, rulesCount, mcpCount, hooksCount, outputStyle } = configCounts;
+    const extraLabel = extraCmd ? await deps.runExtraCmd(extraCmd) : null;
 
     const sessionDuration = formatSessionDuration(
       transcript.sessionStart,
       deps.now,
     );
+    const claudeCodeVersion = config.display.showClaudeCodeVersion
+      ? await deps.getClaudeCodeVersion()
+      : undefined;
+    const effortInfo = config.display.showEffortLevel
+      ? resolveEffortLevel(stdin.effort)
+      : null;
+    const memoryUsage =
+      config.display.showMemoryUsage && config.lineLayout === "expanded"
+        ? await deps.getMemoryUsage()
+        : null;
 
     const ctx: RenderContext = {
       stdin,
@@ -131,6 +128,8 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       extraLabel,
       outputStyle,
       claudeCodeVersion,
+      effortLevel: effortInfo?.level,
+      effortSymbol: effortInfo?.symbol,
     };
 
     deps.render(ctx);

@@ -1,10 +1,12 @@
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, formatModelName, getProviderLabel, getTotalTokens } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, custom as customColor, RESET } from './colors.js';
+import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
+import { renderPromptCacheLine } from './lines/prompt-cache.js';
 import { t } from '../i18n/index.js';
+import { formatResetTime } from './format-reset-time.js';
 const DEBUG = process.env.DEBUG?.includes('claude-hud') || process.env.DEBUG === '*';
 /**
  * Renders the full session line (model + context bar + project + git + counts + usage + duration).
@@ -24,13 +26,21 @@ export function renderSessionLine(ctx) {
     const bar = coloredBar(percent, barWidth, colors);
     const parts = [];
     const display = ctx.config?.display;
+    const timeFormat = display?.timeFormat ?? 'relative';
+    const resetsKey = timeFormat === 'absolute' ? 'format.resets' : 'format.resetsIn';
     const contextValueMode = display?.contextValue ?? 'percent';
     const contextValue = formatContextValue(ctx, percent, contextValueMode);
     const contextValueDisplay = `${getContextColor(percent, colors)}${contextValue}${RESET}`;
     // Model and context bar (FIRST)
     const providerLabel = getProviderLabel(ctx.stdin);
     const modelQualifier = providerLabel ?? undefined;
-    const modelDisplay = modelQualifier ? `${model} | ${modelQualifier}` : model;
+    let modelDisplay = modelQualifier ? `${model} | ${modelQualifier}` : model;
+    if (ctx.effortLevel && ctx.effortSymbol) {
+        modelDisplay += ` ${ctx.effortSymbol}${ctx.effortLevel}`;
+    }
+    else if (ctx.effortLevel) {
+        modelDisplay += ` ${ctx.effortLevel}`;
+    }
     if (display?.showModel !== false && display?.showContextBar !== false) {
         parts.push(`${modelColor(`[${modelDisplay}]`, colors)} ${bar} ${contextValueDisplay}`);
     }
@@ -57,6 +67,7 @@ export function renderSessionLine(ctx) {
     let gitPart = '';
     const gitConfig = ctx.config?.gitStatus;
     const showGit = gitConfig?.enabled ?? true;
+    const branchOverflow = gitConfig?.branchOverflow ?? 'truncate';
     if (showGit && ctx.gitStatus) {
         const gitParts = [ctx.gitStatus.branch];
         // Show dirty indicator
@@ -91,7 +102,13 @@ export function renderSessionLine(ctx) {
         gitPart = `${gitColor('git:(', colors)}${gitBranchColor(gitParts.join(''), colors)}${gitColor(')', colors)}`;
     }
     if (projectPart && gitPart) {
-        parts.push(`${projectPart} ${gitPart}`);
+        if (branchOverflow === 'wrap') {
+            parts.push(projectPart);
+            parts.push(gitPart);
+        }
+        else {
+            parts.push(`${projectPart} ${gitPart}`);
+        }
     }
     else if (projectPart) {
         parts.push(projectPart);
@@ -127,11 +144,23 @@ export function renderSessionLine(ctx) {
     }
     // Usage limits display (shown when enabled in config, respects usageThreshold)
     if (display?.showUsage !== false && ctx.usageData && !providerLabel) {
+        const usageCompact = display?.usageCompact ?? false;
+        const showResetLabel = display?.showResetLabel ?? true;
         if (isLimitReached(ctx.usageData)) {
             const resetTime = ctx.usageData.fiveHour === 100
-                ? formatResetTime(ctx.usageData.fiveHourResetAt)
-                : formatResetTime(ctx.usageData.sevenDayResetAt);
-            parts.push(critical(`⚠ ${t('status.limitReached')}${resetTime ? ` (${t('format.resets')} ${resetTime})` : ''}`, colors));
+                ? formatResetTime(ctx.usageData.fiveHourResetAt, timeFormat)
+                : formatResetTime(ctx.usageData.sevenDayResetAt, timeFormat);
+            if (usageCompact) {
+                parts.push(critical(`⚠ Limit${resetTime ? ` (${resetTime})` : ''}`, colors));
+            }
+            else {
+                const resetSuffix = resetTime
+                    ? showResetLabel
+                        ? ` (${t(resetsKey)} ${resetTime})`
+                        : ` (${resetTime})`
+                    : '';
+                parts.push(critical(`⚠ ${t('status.limitReached')}${resetSuffix}`, colors));
+            }
         }
         else {
             const usageThreshold = display?.usageThreshold ?? 0;
@@ -140,7 +169,26 @@ export function renderSessionLine(ctx) {
             const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
             if (effectiveUsage >= usageThreshold) {
                 const usageBarEnabled = display?.usageBarEnabled ?? true;
-                if (fiveHour === null && sevenDay !== null) {
+                if (usageCompact) {
+                    const fiveHourPart = fiveHour !== null
+                        ? formatCompactWindowPart('5h', fiveHour, ctx.usageData.fiveHourResetAt, timeFormat, colors)
+                        : null;
+                    const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
+                    const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
+                        ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, colors)
+                        : null;
+                    if (fiveHourPart && sevenDayPart) {
+                        parts.push(fiveHourPart);
+                        parts.push(sevenDayPart);
+                    }
+                    else if (fiveHourPart) {
+                        parts.push(fiveHourPart);
+                    }
+                    else if (sevenDayPart) {
+                        parts.push(sevenDayPart);
+                    }
+                }
+                else if (fiveHour === null && sevenDay !== null) {
                     const weeklyOnlyPart = formatUsageWindowPart({
                         label: t('label.weekly'),
                         percent: sevenDay,
@@ -148,6 +196,8 @@ export function renderSessionLine(ctx) {
                         colors,
                         usageBarEnabled,
                         barWidth,
+                        timeFormat,
+                        showResetLabel,
                         forceLabel: true,
                     });
                     parts.push(weeklyOnlyPart);
@@ -160,6 +210,8 @@ export function renderSessionLine(ctx) {
                         colors,
                         usageBarEnabled,
                         barWidth,
+                        timeFormat,
+                        showResetLabel,
                     });
                     const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
                     if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
@@ -170,6 +222,8 @@ export function renderSessionLine(ctx) {
                             colors,
                             usageBarEnabled,
                             barWidth,
+                            timeFormat,
+                            showResetLabel,
                             forceLabel: true,
                         });
                         parts.push(`${label(t('label.usage'), colors)} ${fiveHourPart}`);
@@ -190,19 +244,22 @@ export function renderSessionLine(ctx) {
             parts.push(label(`tok: ${formatTokens(total)} (in: ${formatTokens(st.inputTokens)}, out: ${formatTokens(st.outputTokens)})`, colors));
         }
     }
-    // Session duration
+    if (display?.showDuration !== false && ctx.sessionDuration) {
+        parts.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
+    }
+    const promptCacheLine = renderPromptCacheLine(ctx);
+    if (promptCacheLine) {
+        parts.push(promptCacheLine);
+    }
+    const costEstimate = renderCostEstimate(ctx);
+    if (costEstimate) {
+        parts.push(costEstimate);
+    }
     if (display?.showSpeed) {
         const speed = getOutputSpeed(ctx.stdin);
         if (speed !== null) {
             parts.push(label(`${t('format.out')}: ${speed.toFixed(1)} ${t('format.tokPerSec')}`, colors));
         }
-    }
-    if (display?.showDuration !== false && ctx.sessionDuration) {
-        parts.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
-    }
-    const costEstimate = renderCostEstimate(ctx);
-    if (costEstimate) {
-        parts.push(costEstimate);
     }
     if (ctx.extraLabel) {
         parts.push(label(ctx.extraLabel, colors));
@@ -253,6 +310,14 @@ function formatContextValue(ctx, percent, mode) {
     }
     return `${percent}%`;
 }
+function formatCompactWindowPart(windowLabel, percent, resetAt, timeFormat, colors) {
+    const usageDisplay = formatUsagePercent(percent, colors);
+    const reset = formatResetTime(resetAt, timeFormat);
+    const styledLabel = label(`${windowLabel}:`, colors);
+    return reset
+        ? `${styledLabel} ${usageDisplay} ${label(`(${reset})`, colors)}`
+        : `${styledLabel} ${usageDisplay}`;
+}
 function formatUsagePercent(percent, colors) {
     if (percent === null) {
         return label('--', colors);
@@ -260,34 +325,30 @@ function formatUsagePercent(percent, colors) {
     const color = getQuotaColor(percent, colors);
     return `${color}${percent}%${RESET}`;
 }
-function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, forceLabel = false, }) {
+function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, timeFormat = 'relative', showResetLabel, forceLabel = false, }) {
     const usageDisplay = formatUsagePercent(percent, colors);
-    const reset = formatResetTime(resetAt);
+    const reset = formatResetTime(resetAt, timeFormat);
     const styledLabel = label(windowLabel, colors);
-    const body = reset
-        ? `${usageDisplay} (${reset})`
-        : `${usageDisplay}`;
-    return forceLabel ? `${styledLabel} ${body}` : body;
-}
-function formatResetTime(resetAt) {
-    if (!resetAt)
-        return '';
-    const now = new Date();
-    const diffMs = resetAt.getTime() - now.getTime();
-    if (diffMs <= 0)
-        return '';
-    const diffMins = Math.ceil(diffMs / 60000);
-    if (diffMins < 60)
-        return `${diffMins}m`;
-    const hours = Math.floor(diffMins / 60);
-    const mins = diffMins % 60;
-    if (hours >= 24) {
-        const days = Math.floor(hours / 24);
-        const remHours = hours % 24;
-        if (remHours > 0)
-            return `${days}d ${remHours}h`;
-        return `${days}d`;
+    // "resets in X" for relative/both; "resets X" for absolute (avoids "resets in at 14:30")
+    const resetsKey = timeFormat === 'absolute' ? 'format.resets' : 'format.resetsIn';
+    if (usageBarEnabled) {
+        // Relative mode keeps the upstream "(duration / windowLabel)" pattern (e.g. "2h 30m / 5h").
+        // Absolute/both modes use the preposition form instead — "(at 14:30 / 5h)" is incoherent.
+        const barReset = timeFormat === 'relative'
+            ? (reset ? `${reset} / ${windowLabel}` : null)
+            : (reset ? (showResetLabel ? `${t(resetsKey)} ${reset}` : reset) : null);
+        const body = barReset
+            ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${barReset})`
+            : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+        return forceLabel ? `${styledLabel} ${body}` : body;
     }
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+    const resetSuffix = reset
+        ? showResetLabel
+            ? `(${t(resetsKey)} ${reset})`
+            : `(${reset})`
+        : '';
+    return resetSuffix
+        ? `${styledLabel} ${usageDisplay} ${resetSuffix}`
+        : `${styledLabel} ${usageDisplay}`;
 }
 //# sourceMappingURL=session-line.js.map

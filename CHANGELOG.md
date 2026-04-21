@@ -4,6 +4,30 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-04-21
+
+### Added
+- **Upstream merge**: Merged configurable merge groups, prompt cache TTL display, effort level detection, model name formatting (`full`/`compact`/`short`), and time format options (`relative`/`absolute`/`both`).
+- **Context cache fallback** (`context-cache.ts`): Persists known-good context snapshots per session and restores them when Claude Code emits a suspicious zero-usage frame.
+- **Provider-based usage fallback**: When Claude Code's stdin `rate_limits` are absent, falls back to Kimi (`kimi.com`) and GLM (`bigmodel.cn`) API usage with multi-tier resilience (file lock, retry-after, stale cache).
+- **Buddy companion pet** retained as local feature: 3D ASCII spherical shading with adaptive detail levels (`full`/`compact`/`mini`).
+- **Stats line** retained as local feature: working indicator, last skill, and lines changed.
+- **Multi-mode usage display** (`usageDisplayMode`): `basic`/`compact` (inlined in project line), `table`, and `badge`.
+
+### Changed
+- **Cache TTL**: Provider usage cache reduced from 60s to 10s for fresher data.
+- **Provider detection**: `getDetectedProviderName()` now caches its result for the process lifetime, eliminating repeated `settings.json` reads on every render tick (~300ms).
+- **`usageDisplayMode` default**: `'compact'` -- inlines provider usage into the project line instead of a separate usage line.
+
+### Fixed
+- **Compact mode threshold respect**: `usageThreshold` and `sevenDayThreshold` are now honored in compact mode, hiding low-usage values.
+- **Kimi window classification**: 168-hour windows are now correctly labeled `'7d'` instead of `'168h'`, preventing misclassification as 5-hour windows.
+- **Broken background refresh removed**: `refreshInBackground()` was fire-and-forget, but HUD processes exit too quickly for the async fetch to complete. Stale cache now falls through to synchronous file-lock acquisition instead.
+- **ANSI regex in `usage.ts`**: `visibleLength()` now strips OSC hyperlinks (`\x1b]8;;...\x1b\\`) in addition to SGR sequences, fixing width calculation for hyperlinked text.
+- **Rendering regressions restored**: `UNKNOWN_TERMINAL_WIDTH` safety skip in wrap logic, and `' │ '` (U+2502) separator recognition in line splitting.
+- **Shared helper extraction**: Eliminated duplicate `formatUsageValue()` definitions between `project.ts` and `usage.ts`.
+- **420/420 tests passing** with new test files: `context-cache.test.js`, `effort.test.js`, `format-reset-time.test.js`, `label-align.test.js`, `prompt-cache.test.js`.
+
 ## [0.0.12] - 2026-04-04
 
 ### Added

@@ -36,8 +36,18 @@ test("CLI renders expected output for a basic transcript", async (t) => {
   const homeDir = await mkdtemp(path.join(tmpdir(), "claude-hud-home-"));
   // Use a fixed 3-level path for deterministic test output
   const projectDir = path.join(homeDir, "dev", "apps", "my-project");
+  const pluginDir = path.join(homeDir, ".claude", "plugins", "claude-hud");
   await import("node:fs/promises").then((fs) =>
     fs.mkdir(projectDir, { recursive: true }),
+  );
+  await import("node:fs/promises").then((fs) =>
+    fs.mkdir(pluginDir, { recursive: true }),
+  );
+  // Write a config that disables buddy so the snapshot stays stable
+  await writeFile(
+    path.join(pluginDir, "config.json"),
+    JSON.stringify({ display: { showBuddy: false } }),
+    "utf8",
   );
   try {
     const stdin = JSON.stringify({
@@ -54,7 +64,7 @@ test("CLI renders expected output for a basic transcript", async (t) => {
       cwd: path.resolve(process.cwd()),
       input: stdin,
       encoding: "utf8",
-      env: { ...process.env, HOME: homeDir, LANG: "C" },
+      env: { ...process.env, HOME: homeDir, CLAUDE_CONFIG_DIR: path.join(homeDir, ".claude"), LANG: "C" },
     });
 
     if (skipIfSpawnBlocked(result, t)) return;

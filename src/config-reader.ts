@@ -292,7 +292,7 @@ function computeConfigCountsFresh(cwd?: string): ConfigCounts {
   let hooksCount = 0;
   let outputStyle: string | undefined;
 
-  const homeDir = os.homedir();
+  const homeDir = process.env.HOME || os.homedir();
   const claudeDir = getClaudeConfigDir(homeDir);
 
   // Collect all MCP servers across scopes, then subtract disabled ones
@@ -410,7 +410,7 @@ function computeConfigCountsFresh(cwd?: string): ConfigCounts {
 }
 
 export async function countConfigs(cwd?: string): Promise<ConfigCounts> {
-  const homeDir = os.homedir();
+  const homeDir = process.env.HOME || os.homedir();
   const claudeDir = getClaudeConfigDir(homeDir);
   const claudeConfigJsonPath = getClaudeConfigJsonPath(homeDir);
   const normalizedCwd = cwd ? path.resolve(cwd) : null;

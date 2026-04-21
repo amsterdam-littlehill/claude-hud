@@ -181,7 +181,9 @@ test('getClaudeCodeVersion executes the resolved binary path', async () => {
 
     const version = await getClaudeCodeVersion();
     assert.equal(version, '2.1.81');
-    assert.deepEqual(execCalls, [realBinaryPath]);
+    // On Windows .cmd files are executed through COMSPEC; on Unix the binary path is used directly
+    const expectedExec = process.platform === 'win32' ? (process.env.COMSPEC || 'cmd.exe') : realBinaryPath;
+    assert.deepEqual(execCalls, [expectedExec]);
   } finally {
     restoreEnvVar('HOME', originalHome);
     restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);

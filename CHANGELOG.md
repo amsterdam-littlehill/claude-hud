@@ -4,6 +4,17 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-04-21
+
+### Added
+- **Cross-platform terminal width detection** (`terminal.ts`): Falls back to `/dev/tty` + `stty size` on Unix/macOS and PowerShell `[console]::WindowWidth` on Windows when `process.stdout.columns` and `COLUMNS` env are unavailable in Claude Code's plugin subprocess.
+
+### Fixed
+- **Buddy right-alignment**: Companion pet now correctly aligns to the far right edge of the terminal when terminal width is detectable, instead of positioning relative to the longest status line.
+- **Duplicate usage on line 1**: Removed duplicated usage display from the project line. Usage now renders only on its dedicated line (or inline via compact mode as intended).
+- **Basic/compact usage not showing**: Removed erroneous early `return null` in `renderUsageLine()` that suppressed `basic` and `compact` mode usage rendering.
+- **Terminal width fallback cleanup**: Removed `UNKNOWN_TERMINAL_WIDTH` constant and its compression behavior. When width is undetectable, the HUD now freely expands instead of constraining to 40 columns.
+
 ## [0.0.13] - 2026-04-21
 
 ### Added

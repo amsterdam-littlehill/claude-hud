@@ -84,13 +84,15 @@ Claude HUD gives you better insights into what's happening in your Claude Code s
 
 ## What You See
 
-### Default (2 lines)
+### Default expanded layout
 ```
 [Opus] │ my-project git:(main*)
 Context █████░░░░░ 45% │ Usage ██░░░░░░░░ 25% (1h 30m / 5h)
 ```
-- **Line 1** — Model, provider label when positively identified (for example `Bedrock`), project path, git branch
+- **Line 1** — Model badge, project path, git branch
 - **Line 2** — Context bar (green → yellow → red) and usage rate limits
+- **Stats line** (default on) — Working indicator, last skill, and lines changed
+- **Buddy** (default on) — Companion pet aligned to the right edge of the terminal
 
 ### Optional lines (enable via `/claude-hud:configure`)
 ```
@@ -276,7 +278,7 @@ To disable, set `display.showUsage` to `false`.
   "language": "zh",
   "lineLayout": "expanded",
   "pathLevels": 2,
-  "elementOrder": ["project", "tools", "context", "usage", "memory", "environment", "stats", "agents", "todos"],
+  "elementOrder": ["project", "tools", "context", "usage", "memory", "environment", "stats", "agents", "todos", "promptCache"],
   "gitStatus": {
     "enabled": true,
     "showDirty": true,

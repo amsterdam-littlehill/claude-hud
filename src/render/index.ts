@@ -19,7 +19,7 @@ import {
   renderSessionTokensLine,
 } from './lines/index.js';
 import { dim, RESET } from './colors.js';
-import { getTerminalWidth, UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
+import { getTerminalWidth } from '../utils/terminal.js';
 
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
@@ -435,7 +435,7 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
 
         if (renderedGroupLines.length > 1) {
           const combinedLine = renderedGroupLines.map(({ line }) => line).join(' │ ');
-          const widthIsReal = terminalWidth && terminalWidth !== UNKNOWN_TERMINAL_WIDTH;
+          const widthIsReal = terminalWidth !== null;
           const canCombine = !widthIsReal || visualLength(combinedLine) <= terminalWidth;
 
           if (canCombine) {
@@ -492,20 +492,15 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
 export function render(ctx: RenderContext): void {
   const lineLayout = ctx.config?.lineLayout ?? 'expanded';
   const showSeparators = ctx.config?.showSeparators ?? false;
-  const detectedWidth =
-    getTerminalWidth({ fallback: UNKNOWN_TERMINAL_WIDTH }) ??
-    UNKNOWN_TERMINAL_WIDTH;
-  const terminalWidth =
-    detectedWidth === UNKNOWN_TERMINAL_WIDTH && ctx.config?.maxWidth
-      ? ctx.config.maxWidth
-      : detectedWidth;
+  const detectedWidth = getTerminalWidth();
+  const terminalWidth = detectedWidth ?? ctx.config?.maxWidth ?? null;
 
   // Buddy column: adaptive detail level based on available space.
   // Tries full -> compact -> mini, giving up if even mini won't fit.
   const showBuddy = ctx.config?.display?.showBuddy === true;
   let buddyColumn: BuddyColumn | null = null;
   let buddyWidth = 0;
-  const buddyPadding = 1;
+  const BUDDY_GAP = 2;
   const STATUS_MIN_WIDTH = 15;
 
   if (showBuddy) {
@@ -513,7 +508,7 @@ export function render(ctx: RenderContext): void {
     for (const level of levels) {
       const col = renderBuddyColumn(level);
       if (!col) continue;
-      const needed = col.width + buddyPadding + STATUS_MIN_WIDTH;
+      const needed = col.width + BUDDY_GAP + STATUS_MIN_WIDTH;
       // Unknown width -> show the highest level; known width -> must fit.
       if (terminalWidth === null || terminalWidth >= needed) {
         buddyColumn = col;
@@ -525,7 +520,7 @@ export function render(ctx: RenderContext): void {
 
   const hasBuddy = buddyColumn !== null;
   const statusWidth = hasBuddy && terminalWidth !== null
-    ? terminalWidth - buddyWidth - buddyPadding
+    ? terminalWidth - buddyWidth - BUDDY_GAP
     : terminalWidth;
 
   let lines: string[];
@@ -579,14 +574,16 @@ export function render(ctx: RenderContext): void {
   const buddyLines = buddyColumn?.lines ?? [];
   const maxLines = Math.max(visibleLines.length, buddyLines.length);
   const maxStatusLen = Math.max(...visibleLines.map(visualLength), 0);
-  const BUDDY_GAP = 2;
   for (let i = 0; i < maxLines; i++) {
     const statusLine = visibleLines[i] ?? '';
     const buddyLine = buddyLines[i] ?? '';
 
     if (buddyLine) {
       const statusVisualLen = visualLength(statusLine);
-      const padding = ' '.repeat(Math.max(0, maxStatusLen - statusVisualLen + BUDDY_GAP));
+      const buddyStart = terminalWidth !== null
+        ? terminalWidth - buddyWidth
+        : maxStatusLen + BUDDY_GAP;
+      const padding = ' '.repeat(Math.max(0, buddyStart - statusVisualLen));
       console.log(`${RESET}${statusLine}${padding}${buddyLine}`);
     } else {
       console.log(`${RESET}${statusLine}`);

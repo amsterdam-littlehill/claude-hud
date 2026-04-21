@@ -20,15 +20,13 @@ export function renderUsageLine(ctx, alignLabels = false) {
         return null;
     }
     const mode = display?.usageDisplayMode;
-    if (mode === "basic" || mode === "compact") {
-        return null;
-    }
     if (mode === "table") {
         return renderUsageTable(ctx);
     }
     if (mode === "badge") {
         return renderUsageBadge(ctx);
     }
+    // basic / compact fall through to legacy rendering below
     // ─── Upstream legacy rendering (fallback) ───────────────────────────────────
     const usageLabel = progressLabel("label.usage", colors, alignLabels);
     const timeFormat = display?.timeFormat ?? 'relative';

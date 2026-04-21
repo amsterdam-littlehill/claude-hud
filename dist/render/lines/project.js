@@ -6,8 +6,6 @@ import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, 
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
 import { getDetectedProviderName } from '../../provider-usage.js';
-import { formatResetTime } from '../format-reset-time.js';
-import { formatUsageValue } from '../format-usage-value.js';
 function formatCompactProvider(provider) {
     if (!provider)
         return '';
@@ -57,53 +55,7 @@ export function renderProjectLine(ctx, terminalWidth = null) {
                 modelDisplay = modelColor(`[${providerLabel}]`, colors) + modelDisplay;
             }
         }
-        let usagePart = null;
-        if (display?.showUsage !== false && ctx.usageData) {
-            if (usageMode === 'basic') {
-                const weekVal = formatUsageValue(ctx.usageData.sevenDayUsed, ctx.usageData.sevenDayLimit, ctx.usageData.sevenDay);
-                const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, ctx.usageData.fiveHour);
-                const timeFormat = display?.timeFormat ?? 'relative';
-                const weekReset = formatResetTime(ctx.usageData.sevenDayResetAt ?? null, timeFormat);
-                const fiveHourReset = formatResetTime(ctx.usageData.fiveHourResetAt ?? null, timeFormat);
-                const weekPart = weekVal !== '--' ? label(`[${weekVal}${weekReset ? `(${weekReset})` : ''}]`, colors) : '';
-                const fiveHourPart = fiveHourVal !== '--' ? label(`[${fiveHourVal}${fiveHourReset ? `(${fiveHourReset})` : ''}]`, colors) : '';
-                if (weekPart || fiveHourPart) {
-                    modelDisplay += label('-', colors) + weekPart + fiveHourPart;
-                }
-            }
-            else if (usageMode === 'compact') {
-                const threshold = display?.usageThreshold ?? 0;
-                const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
-                const fiveHour = ctx.usageData.fiveHour;
-                const sevenDay = ctx.usageData.sevenDay;
-                const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
-                if (effectiveUsage >= threshold) {
-                    const timeFormat = display?.timeFormat ?? 'relative';
-                    const weekReset = formatResetTime(ctx.usageData.sevenDayResetAt ?? null, timeFormat);
-                    const fiveHourReset = formatResetTime(ctx.usageData.fiveHourResetAt ?? null, timeFormat);
-                    // On narrow terminals skip reset times to keep the line compact
-                    const showReset = terminalWidth === null || terminalWidth >= 100;
-                    const usageParts = [];
-                    if (fiveHour !== null) {
-                        const fiveHourVal = formatUsageValue(ctx.usageData.fiveHourUsed, ctx.usageData.fiveHourLimit, fiveHour);
-                        const part = `5H: ${fiveHourVal}`;
-                        usageParts.push(showReset && fiveHourReset ? `${part} (${fiveHourReset})` : part);
-                    }
-                    if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
-                        const weekVal = formatUsageValue(ctx.usageData.sevenDayUsed, ctx.usageData.sevenDayLimit, sevenDay);
-                        const part = `W: ${weekVal}`;
-                        usageParts.push(showReset && weekReset ? `${part} (${weekReset})` : part);
-                    }
-                    if (usageParts.length > 0) {
-                        usagePart = usageParts.join(' ');
-                    }
-                }
-            }
-        }
         headerParts.push(modelDisplay);
-        if (usagePart) {
-            headerParts.push(usagePart);
-        }
     }
     let projectPart = null;
     if (display?.showProject !== false && ctx.stdin.cwd) {

@@ -32,10 +32,6 @@ export function renderUsageLine(
 
   const mode = display?.usageDisplayMode;
 
-  if (mode === "basic" || mode === "compact") {
-    return null;
-  }
-
   if (mode === "table") {
     return renderUsageTable(ctx);
   }
@@ -43,6 +39,8 @@ export function renderUsageLine(
   if (mode === "badge") {
     return renderUsageBadge(ctx);
   }
+
+  // basic / compact fall through to legacy rendering below
 
   // ─── Upstream legacy rendering (fallback) ───────────────────────────────────
 
